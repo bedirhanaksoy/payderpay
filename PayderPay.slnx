@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PayderPay.Api/PayderPay.Api.csproj" />
+    <Project Path="src/PayderPay.Application/PayderPay.Application.csproj" />
+    <Project Path="src/PayderPay.Domain/PayderPay.Domain.csproj" />
+    <Project Path="src/PayderPay.Infrastructure/PayderPay.Infrastructure.csproj" />
+    <Project Path="src/PayderPay.MockApi/PayderPay.MockApi.csproj" />
+  </Folder>
+</Solution>
