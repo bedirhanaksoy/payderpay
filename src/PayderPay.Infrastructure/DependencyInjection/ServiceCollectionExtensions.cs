@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using PayderPay.Application.Abstractions.ApplicationServices;
 using PayderPay.Application.Abstractions.Repositories;
 using PayderPay.Application.Abstractions.Services;
 using PayderPay.Application.Configurations;
-using PayderPay.Infrastructure.BackgroundJobs;
+using PayderPay.Application.Services;
 using PayderPay.Infrastructure.Integrations;
 using PayderPay.Infrastructure.Persistence;
 using PayderPay.Infrastructure.Persistence.Repositories;
@@ -43,7 +44,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationLogRepository, NotificationLogRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        services.AddHostedService<ReminderBackgroundService>();
+        services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<ISubscriptionService, SubscriptionService>();
+        services.AddScoped<IDebtQueryService, DebtQueryService>();
+        services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<ISummaryService, SummaryService>();
 
         return services;
     }

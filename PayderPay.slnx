@@ -6,4 +6,8 @@
     <Project Path="src/PayderPay.Infrastructure/PayderPay.Infrastructure.csproj" />
     <Project Path="src/PayderPay.MockApi/PayderPay.MockApi.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PayderPay.Api.IntegrationTests/PayderPay.Api.IntegrationTests.csproj" />
+    <Project Path="tests/PayderPay.Application.UnitTests/PayderPay.Application.UnitTests.csproj" />
+  </Folder>
 </Solution>

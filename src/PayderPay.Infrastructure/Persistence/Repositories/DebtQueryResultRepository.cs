@@ -18,6 +18,13 @@ public class DebtQueryResultRepository : IDebtQueryResultRepository
         await _context.DebtQueryResults.AddAsync(debtQueryResult, cancellationToken);
     }
 
+    public async Task<DebtQueryResult?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.DebtQueryResults
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    }
+
     public async Task<DebtQueryResult?> GetLatestBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
     {
         return await _context.DebtQueryResults
