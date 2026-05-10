@@ -1,11 +1,30 @@
 {
   "version": 3,
   "targets": {
-    "net10.0": {}
+    "net10.0": {
+      "PayderPay.Domain/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v10.0",
+        "compile": {
+          "bin/placeholder/PayderPay.Domain.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/PayderPay.Domain.dll": {}
+        }
+      }
+    }
   },
-  "libraries": {},
+  "libraries": {
+    "PayderPay.Domain/1.0.0": {
+      "type": "project",
+      "path": "../PayderPay.Domain/PayderPay.Domain.csproj",
+      "msbuildProject": "../PayderPay.Domain/PayderPay.Domain.csproj"
+    }
+  },
   "projectFileDependencyGroups": {
-    "net10.0": []
+    "net10.0": [
+      "PayderPay.Domain >= 1.0.0"
+    ]
   },
   "packageFolders": {
     "/Users/bedirhan/.nuget/packages/": {}
@@ -31,7 +50,11 @@
       "frameworks": {
         "net10.0": {
           "targetAlias": "net10.0",
-          "projectReferences": {}
+          "projectReferences": {
+            "/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/PayderPay.Domain.csproj": {
+              "projectPath": "/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/PayderPay.Domain.csproj"
+            }
+          }
         }
       },
       "warningProperties": {

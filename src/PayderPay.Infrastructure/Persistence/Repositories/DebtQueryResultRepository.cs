@@ -1,0 +1,38 @@
+using Microsoft.EntityFrameworkCore;
+using PayderPay.Application.Abstractions.Repositories;
+using PayderPay.Domain.Entities;
+
+namespace PayderPay.Infrastructure.Persistence.Repositories;
+
+public class DebtQueryResultRepository : IDebtQueryResultRepository
+{
+    private readonly PayderPayDbContext _context;
+
+    public DebtQueryResultRepository(PayderPayDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task AddAsync(DebtQueryResult debtQueryResult, CancellationToken cancellationToken = default)
+    {
+        await _context.DebtQueryResults.AddAsync(debtQueryResult, cancellationToken);
+    }
+
+    public async Task<DebtQueryResult?> GetLatestBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    {
+        return await _context.DebtQueryResults
+            .AsNoTracking()
+            .Where(x => x.SubscriptionId == subscriptionId)
+            .OrderByDescending(x => x.QueriedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DebtQueryResult>> GetHistoryBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    {
+        return await _context.DebtQueryResults
+            .AsNoTracking()
+            .Where(x => x.SubscriptionId == subscriptionId)
+            .OrderByDescending(x => x.QueriedAtUtc)
+            .ToListAsync(cancellationToken);
+    }
+}
