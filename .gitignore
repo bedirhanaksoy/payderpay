@@ -1,0 +1,21 @@
+# Build output
+**/[Bb]in/
+**/[Oo]bj/
+
+# IDE and editor folders
+.vs/
+.vscode/
+.idea/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test and coverage output
+TestResults/
+coverage/
+
+# OS files
+.DS_Store
