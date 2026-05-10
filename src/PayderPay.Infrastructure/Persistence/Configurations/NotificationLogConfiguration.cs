@@ -8,7 +8,10 @@ public class NotificationLogConfiguration : IEntityTypeConfiguration<Notificatio
 {
     public void Configure(EntityTypeBuilder<NotificationLog> builder)
     {
-        builder.ToTable("NotificationLogs");
+        builder.ToTable("NotificationLogs", tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint("CK_NotificationLogs_PeriodMonth", "\"PeriodMonth\" >= 1 AND \"PeriodMonth\" <= 12");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -48,8 +51,6 @@ public class NotificationLogConfiguration : IEntityTypeConfiguration<Notificatio
 
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
-
-        builder.HasCheckConstraint("CK_NotificationLogs_PeriodMonth", "\"PeriodMonth\" >= 1 AND \"PeriodMonth\" <= 12");
 
         builder.HasIndex(x => new { x.SubscriptionId, x.PeriodYear, x.PeriodMonth, x.Channel, x.Status });
 

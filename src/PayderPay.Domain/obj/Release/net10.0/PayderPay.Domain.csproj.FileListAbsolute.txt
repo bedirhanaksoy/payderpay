@@ -1,0 +1,12 @@
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/bin/Release/net10.0/PayderPay.Domain.deps.json
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/bin/Release/net10.0/PayderPay.Domain.dll
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/bin/Release/net10.0/PayderPay.Domain.pdb
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.AssemblyInfoInputs.cache
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.AssemblyInfo.cs
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.csproj.CoreCompileInputs.cache
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.sourcelink.json
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.dll
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/refint/PayderPay.Domain.dll
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/PayderPay.Domain.pdb
+/Users/bedirhan/Documents/Projects/CaseStudy/src/PayderPay.Domain/obj/Release/net10.0/ref/PayderPay.Domain.dll

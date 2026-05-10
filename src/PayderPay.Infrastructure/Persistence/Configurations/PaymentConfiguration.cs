@@ -8,7 +8,10 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 {
     public void Configure(EntityTypeBuilder<Payment> builder)
     {
-        builder.ToTable("Payments");
+        builder.ToTable("Payments", tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint("CK_Payments_PeriodMonth", "\"PeriodMonth\" >= 1 AND \"PeriodMonth\" <= 12");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -41,8 +44,6 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
-
-        builder.HasCheckConstraint("CK_Payments_PeriodMonth", "\"PeriodMonth\" >= 1 AND \"PeriodMonth\" <= 12");
 
         builder.HasIndex(x => new { x.SubscriptionId, x.PeriodYear, x.PeriodMonth })
             .IsUnique()

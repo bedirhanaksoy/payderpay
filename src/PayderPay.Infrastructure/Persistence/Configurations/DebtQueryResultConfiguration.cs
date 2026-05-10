@@ -8,7 +8,10 @@ public class DebtQueryResultConfiguration : IEntityTypeConfiguration<DebtQueryRe
 {
     public void Configure(EntityTypeBuilder<DebtQueryResult> builder)
     {
-        builder.ToTable("DebtQueryResults");
+        builder.ToTable("DebtQueryResults", tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint("CK_DebtQueryResults_PeriodMonth", "\"PeriodMonth\" >= 1 AND \"PeriodMonth\" <= 12");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -37,8 +40,6 @@ public class DebtQueryResultConfiguration : IEntityTypeConfiguration<DebtQueryRe
 
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
-
-        builder.HasCheckConstraint("CK_DebtQueryResults_PeriodMonth", "\"PeriodMonth\" >= 1 AND \"PeriodMonth\" <= 12");
 
         builder.HasIndex(x => new { x.SubscriptionId, x.QueriedAtUtc });
 

@@ -8,7 +8,10 @@ public class SubscriptionConfiguration : IEntityTypeConfiguration<Subscription>
 {
     public void Configure(EntityTypeBuilder<Subscription> builder)
     {
-        builder.ToTable("Subscriptions");
+        builder.ToTable("Subscriptions", tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint("CK_Subscriptions_DueDayOfMonth", "\"DueDayOfMonth\" >= 1 AND \"DueDayOfMonth\" <= 31");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -38,8 +41,6 @@ public class SubscriptionConfiguration : IEntityTypeConfiguration<Subscription>
 
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
-
-        builder.HasCheckConstraint("CK_Subscriptions_DueDayOfMonth", "\"DueDayOfMonth\" >= 1 AND \"DueDayOfMonth\" <= 31");
 
         builder.HasIndex(x => new { x.CustomerId, x.ProviderName, x.SubscriberNumber })
             .IsUnique()
