@@ -32,10 +32,16 @@ public class CustomerService : ICustomerService
             throw new BadRequestException("Initial main account balance cannot be negative.");
         }
 
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        if (await _customerRepository.EmailExistsAsync(normalizedEmail, cancellationToken))
+        {
+            throw new ConflictException("A customer with this email already exists.");
+        }
+
         var customer = new Customer
         {
             FullName = request.FullName.Trim(),
-            Email = request.Email.Trim(),
+            Email = normalizedEmail,
             PhoneNumber = request.PhoneNumber.Trim(),
             IsActive = true
         };

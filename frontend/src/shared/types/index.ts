@@ -141,3 +141,28 @@ export interface SessionUser {
   email: string
   phoneNumber: string
 }
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface RegisterRequest {
+  fullName: string
+  email: string
+  phoneNumber: string
+  password: string
+  initialMainAccountBalance: number
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string
+}
+
+export interface AuthResponse {
+  accessToken: string
+  accessTokenExpiresAtUtc: string
+  refreshToken: string
+  refreshTokenExpiresAtUtc: string
+  customer: CustomerResponse
+}

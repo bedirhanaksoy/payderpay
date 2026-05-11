@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,13 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Ensure the API can resolve Jwt settings even when host config supplies none.
+        builder.UseSetting("Jwt:Issuer", "PayderPay.Test");
+        builder.UseSetting("Jwt:Audience", "PayderPay.Test.Clients");
+        builder.UseSetting("Jwt:SigningKey", "integration-test-only-signing-key-32+chars-long-abcdefghijklmnop");
+        builder.UseSetting("Jwt:AccessTokenMinutes", "15");
+        builder.UseSetting("Jwt:RefreshTokenDays", "7");
+
         builder.ConfigureServices(services =>
         {
             RemoveDbContextRegistrations(services);
@@ -30,6 +38,17 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddSingleton<IDebtProviderClient, FakeDebtProviderClient>();
             services.AddSingleton<IPaymentGatewayClient, FakePaymentGatewayClient>();
+
+            // Swap JwtBearer for the test scheme so controllers decorated with
+            // [Authorize] accept the legacy un-authenticated workflow tests.
+            services
+                .AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                    options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                    options.DefaultScheme = TestAuthHandler.SchemeName;
+                })
+                .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
         });
     }
 

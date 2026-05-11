@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Subscriptions;
@@ -6,6 +7,7 @@ using PayderPay.Application.Dtos.Summaries;
 namespace PayderPay.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/subscriptions")]
 public class SubscriptionsController : ControllerBase
 {

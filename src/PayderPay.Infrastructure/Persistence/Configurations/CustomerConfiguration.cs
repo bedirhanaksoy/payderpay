@@ -24,6 +24,9 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .IsRequired()
             .HasMaxLength(30);
 
+        builder.Property(x => x.PasswordHash)
+            .HasMaxLength(200);
+
         builder.Property(x => x.IsActive)
             .IsRequired();
 
@@ -33,7 +36,9 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
 
-        builder.HasIndex(x => x.Email);
+        builder.HasIndex(x => x.Email)
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
 
         builder.HasMany(x => x.Subscriptions)
             .WithOne(x => x.Customer)
@@ -44,6 +49,11 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .WithOne(x => x.Customer)
             .HasForeignKey(x => x.CustomerId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(x => x.RefreshTokens)
+            .WithOne(x => x.Customer)
+            .HasForeignKey(x => x.CustomerId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(x => x.MainAccount)
             .WithOne(x => x.Customer)

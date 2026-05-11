@@ -15,11 +15,11 @@ const subscriptionTypes: SubscriptionType[] = [1, 2, 3, 4, 5, 6]
 const subscriptionStatuses: SubscriptionStatus[] = [1, 2]
 
 const schema = z.object({
-  subscriptionType: z.coerce.number().int().min(1).max(6),
+  subscriptionType: z.number().int().min(1).max(6),
   providerName: z.string().min(1).max(200),
   subscriberNumber: z.string().min(1).max(100),
-  dueDayOfMonth: z.coerce.number().int().min(1).max(31),
-  status: z.coerce.number().int().min(1).max(2).optional(),
+  dueDayOfMonth: z.number().int().min(1).max(31),
+  status: z.number().int().min(1).max(2).optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -49,7 +49,7 @@ function SubscriptionForm({ defaultValues, isEdit, isPending, error, onSubmit }:
       {apiError && <div className="alert alert-error">{apiError.detail ?? apiError.title}</div>}
 
       <Field label="Subscription type" error={errors.subscriptionType?.message}>
-        <Select error={!!errors.subscriptionType} {...register('subscriptionType')}>
+        <Select error={!!errors.subscriptionType} {...register('subscriptionType', { valueAsNumber: true })}>
           {subscriptionTypes.map(type => (
             <option key={type} value={type}>{subscriptionTypeLabel(type)}</option>
           ))}
@@ -65,12 +65,12 @@ function SubscriptionForm({ defaultValues, isEdit, isPending, error, onSubmit }:
       </Field>
 
       <Field label="Due day of month" error={errors.dueDayOfMonth?.message}>
-        <Input type="number" min="1" max="31" error={!!errors.dueDayOfMonth} {...register('dueDayOfMonth')} />
+        <Input type="number" min="1" max="31" error={!!errors.dueDayOfMonth} {...register('dueDayOfMonth', { valueAsNumber: true })} />
       </Field>
 
       {isEdit && (
         <Field label="Status" error={errors.status?.message}>
-          <Select error={!!errors.status} {...register('status')}>
+          <Select error={!!errors.status} {...register('status', { valueAsNumber: true })}>
             {subscriptionStatuses.map(status => (
               <option key={status} value={status}>{subscriptionStatusLabel(status)}</option>
             ))}

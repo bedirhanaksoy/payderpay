@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Customers;
@@ -5,6 +6,7 @@ using PayderPay.Application.Dtos.Customers;
 namespace PayderPay.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/customers")]
 public class CustomersController : ControllerBase
 {

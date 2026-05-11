@@ -12,6 +12,7 @@ public class PayderPayDbContext : DbContext
     }
 
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<MainAccount> MainAccounts => Set<MainAccount>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Payment> Payments => Set<Payment>();

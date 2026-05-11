@@ -1,6 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.Security;
@@ -24,6 +29,7 @@ public static class DependencyInjection
         services.Configure<SmtpSettings>(configuration.GetSection(SmtpSettings.SectionName));
         services.Configure<ReminderJobSettings>(configuration.GetSection(ReminderJobSettings.SectionName));
         services.Configure<ExternalServiceSettings>(configuration.GetSection(ExternalServiceSettings.SectionName));
+        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
 
         services.AddHttpClient<IDebtProviderClient, DebtProviderClient>((sp, client) =>
         {
@@ -43,9 +49,68 @@ public static class DependencyInjection
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IDebtQueryResultRepository, DebtQueryResultRepository>();
         services.AddScoped<INotificationLogRepository, NotificationLogRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IIbanGenerator, IbanGenerator>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+        services.AddJwtBearerAuthentication(configuration);
+        services.AddAuthorization();
 
         return services;
+    }
+
+    private static void AddJwtBearerAuthentication(this IServiceCollection services, IConfiguration configuration)
+    {
+        var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
+            ?? throw new InvalidOperationException("Jwt settings are missing.");
+
+        services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = jwtSettings.Issuer,
+                    ValidAudience = jwtSettings.Audience,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey)),
+                    ClockSkew = TimeSpan.FromSeconds(30)
+                };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = ValidateCustomerIsActiveAsync
+                };
+            });
+    }
+
+    private static async Task ValidateCustomerIsActiveAsync(TokenValidatedContext context)
+    {
+        var subject = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sub)
+            ?? context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(subject, out var customerId))
+        {
+            context.Fail("Invalid customer claim.");
+            return;
+        }
+
+        var dbContext = context.HttpContext.RequestServices.GetRequiredService<PayderPayDbContext>();
+        var customer = await dbContext.Customers
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == customerId, context.HttpContext.RequestAborted);
+
+        if (customer is null || !customer.IsActive || customer.IsDeleted)
+        {
+            context.Fail("Customer account is inactive.");
+        }
     }
 }

@@ -60,12 +60,12 @@ export default function RegisterPage() {
             <Input placeholder="+90 5xx xxx xx xx" error={!!errors.phoneNumber} {...register('phoneNumber')} />
           </Field>
 
-          <Field label="Password" error={errors.password?.message} hint="Stored for UI flow until backend auth is implemented.">
+          <Field label="Password" error={errors.password?.message}>
             <Input type="password" placeholder="••••••••" error={!!errors.password} {...register('password')} />
           </Field>
 
           <Field label="Initial main account balance" error={errors.initialMainAccountBalance?.message}>
-            <Input type="number" step="0.01" min="0" error={!!errors.initialMainAccountBalance} {...register('initialMainAccountBalance')} />
+            <Input type="number" step="0.01" min="0" error={!!errors.initialMainAccountBalance} {...register('initialMainAccountBalance', { valueAsNumber: true })} />
           </Field>
 
           <button

@@ -68,6 +68,18 @@ public class CustomerServiceTests
             return Task.FromResult(Customers.FirstOrDefault(x => x.Id == id));
         }
 
+        public Task<Customer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Customers.FirstOrDefault(x =>
+                string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Customers.Any(x =>
+                string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)));
+        }
+
         public Task<IReadOnlyList<Customer>> GetAllAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<Customer>>(Customers);

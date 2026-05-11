@@ -21,6 +21,19 @@ public class CustomerRepository : ICustomerRepository
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
+    public async Task<Customer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        return await _context.Customers
+            .FirstOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
+    }
+
+    public async Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        return await _context.Customers.AnyAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Customer>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Customers

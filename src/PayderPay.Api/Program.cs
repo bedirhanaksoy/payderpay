@@ -1,9 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
 using PayderPay.Api.Configuration;
 using PayderPay.Api.Middleware;
 using PayderPay.Application;
 using PayderPay.Infrastructure;
 
 DotEnvLoader.LoadFromRepositoryRoot();
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,6 +47,8 @@ var app = builder.Build();
 app.UseExceptionHandling();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.MapGet("/", () => Results.Ok(new

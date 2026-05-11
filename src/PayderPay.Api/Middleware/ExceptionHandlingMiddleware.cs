@@ -60,6 +60,7 @@ public class ExceptionHandlingMiddleware
     {
         return exception switch
         {
+            UnauthorizedException => (HttpStatusCode.Unauthorized, "Unauthorized"),
             NotFoundException => (HttpStatusCode.NotFound, "Resource Not Found"),
             ConflictException => (HttpStatusCode.Conflict, "Conflict"),
             BadRequestException => (HttpStatusCode.BadRequest, "Bad Request"),
