@@ -1,4 +1,4 @@
-namespace PayderPay.Application.DTOs.Customers;
+namespace PayderPay.Application.Dtos.Customers;
 
 public class CustomerResponse
 {

@@ -2,8 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using PayderPay.Application.Abstractions.Services;
-using PayderPay.Application.Configurations;
+using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Common.Settings;
 
 namespace PayderPay.Infrastructure.BackgroundJobs;
 

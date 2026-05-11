@@ -1,6 +1,6 @@
 using PayderPay.Domain.Enums;
 
-namespace PayderPay.Application.DTOs.Payments;
+namespace PayderPay.Application.Dtos.Payments;
 
 public class PaymentHistoryItemResponse
 {

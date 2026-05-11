@@ -4,8 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using PayderPay.Application.Abstractions.Services;
-using PayderPay.Application.DTOs.External;
+using PayderPay.Application.Common.Interfaces.External;
+using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Dtos.External;
 using PayderPay.Infrastructure.Persistence;
 
 namespace PayderPay.Api.IntegrationTests;

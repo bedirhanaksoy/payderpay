@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PayderPay.Application.DTOs.Payments;
+namespace PayderPay.Application.Dtos.Payments;
 
 public class CreatePaymentRequest
 {

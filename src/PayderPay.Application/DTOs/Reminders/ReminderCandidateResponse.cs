@@ -1,6 +1,6 @@
 using PayderPay.Domain.Enums;
 
-namespace PayderPay.Application.DTOs.Reminders;
+namespace PayderPay.Application.Dtos.Reminders;
 
 public class ReminderCandidateResponse
 {

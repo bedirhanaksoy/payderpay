@@ -1,11 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
-using PayderPay.Application.DTOs.Customers;
-using PayderPay.Application.DTOs.Debts;
-using PayderPay.Application.DTOs.MainAccounts;
-using PayderPay.Application.DTOs.Payments;
-using PayderPay.Application.DTOs.Subscriptions;
-using PayderPay.Application.DTOs.Summaries;
+using PayderPay.Application.Dtos.Customers;
+using PayderPay.Application.Dtos.Debts;
+using PayderPay.Application.Dtos.MainAccounts;
+using PayderPay.Application.Dtos.Payments;
+using PayderPay.Application.Dtos.Subscriptions;
+using PayderPay.Application.Dtos.Summaries;
 using PayderPay.Domain.Enums;
 
 namespace PayderPay.Api.IntegrationTests;

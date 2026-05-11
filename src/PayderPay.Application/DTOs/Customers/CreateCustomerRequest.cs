@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PayderPay.Application.DTOs.Customers;
+namespace PayderPay.Application.Dtos.Customers;
 
 public class CreateCustomerRequest
 {

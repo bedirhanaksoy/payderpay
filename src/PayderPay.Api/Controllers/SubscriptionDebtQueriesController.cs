@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using PayderPay.Application.Abstractions.ApplicationServices;
-using PayderPay.Application.DTOs.Debts;
+using PayderPay.Application.Services;
+using PayderPay.Application.Dtos.Debts;
 
 namespace PayderPay.Api.Controllers;
 

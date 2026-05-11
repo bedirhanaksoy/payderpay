@@ -1,6 +1,7 @@
 using PayderPay.Api.Configuration;
 using PayderPay.Api.Middleware;
-using PayderPay.Infrastructure.DependencyInjection;
+using PayderPay.Application;
+using PayderPay.Infrastructure;
 
 DotEnvLoader.LoadFromRepositoryRoot();
 
@@ -18,7 +19,11 @@ if (allowedOrigins.Length == 0)
     allowedOrigins = ["http://localhost:5141"];
 }
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ValidationFilter>();
+});
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options =>
@@ -37,7 +42,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-app.UseGlobalExceptionHandling();
+app.UseExceptionHandling();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
 app.MapControllers();

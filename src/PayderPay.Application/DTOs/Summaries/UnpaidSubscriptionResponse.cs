@@ -1,6 +1,6 @@
 using PayderPay.Domain.Enums;
 
-namespace PayderPay.Application.DTOs.Summaries;
+namespace PayderPay.Application.Dtos.Summaries;
 
 public class UnpaidSubscriptionResponse
 {

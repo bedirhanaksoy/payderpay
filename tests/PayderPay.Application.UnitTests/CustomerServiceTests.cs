@@ -1,7 +1,8 @@
-using PayderPay.Application.Abstractions.Repositories;
-using PayderPay.Application.Abstractions.Services;
-using PayderPay.Application.DTOs.Customers;
-using PayderPay.Application.Exceptions;
+using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Interfaces.External;
+using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Dtos.Customers;
+using PayderPay.Application.Common.Exceptions;
 using PayderPay.Application.Services;
 using PayderPay.Domain.Entities;
 

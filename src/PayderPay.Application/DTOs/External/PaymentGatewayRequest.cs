@@ -1,4 +1,4 @@
-namespace PayderPay.Application.DTOs.External;
+namespace PayderPay.Application.Dtos.External;
 
 public class PaymentGatewayRequest
 {

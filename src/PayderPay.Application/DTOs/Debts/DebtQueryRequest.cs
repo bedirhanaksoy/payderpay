@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PayderPay.Application.DTOs.Debts;
+namespace PayderPay.Application.Dtos.Debts;
 
 public class DebtQueryRequest
 {

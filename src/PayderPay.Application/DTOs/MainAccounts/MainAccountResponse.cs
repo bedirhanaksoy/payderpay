@@ -1,4 +1,4 @@
-namespace PayderPay.Application.DTOs.MainAccounts;
+namespace PayderPay.Application.Dtos.MainAccounts;
 
 public class MainAccountResponse
 {
