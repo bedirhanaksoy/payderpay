@@ -15,6 +15,9 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.DebtId)
+            .IsRequired();
+
         builder.Property(x => x.Amount)
             .HasPrecision(18, 2)
             .IsRequired();
@@ -45,7 +48,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
 
-        builder.HasIndex(x => new { x.SubscriptionId, x.PeriodYear, x.PeriodMonth })
+        builder.HasIndex(x => x.DebtId)
             .IsUnique()
             .HasFilter("\"Status\" = 'Successful' AND \"IsDeleted\" = false");
 

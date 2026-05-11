@@ -49,7 +49,7 @@ export default function ProfilePage() {
     )
   }
 
-  const parsedDeleteError = deleteMutation.error ? parseProblemDetails(deleteMutation.error) : null
+  const parsedDeleteError = deleteMutation.error ? parseProblemDetails(deleteMutation.error, 'profile') : null
 
   return (
     <>
@@ -108,7 +108,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {parsedDeleteError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{parsedDeleteError.detail ?? parsedDeleteError.title}</div>}
+      {parsedDeleteError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{parsedDeleteError.userMessage}</div>}
 
       <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>
         Close Account (Soft Delete Customer)

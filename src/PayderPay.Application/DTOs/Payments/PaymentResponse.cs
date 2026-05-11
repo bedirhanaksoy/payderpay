@@ -5,6 +5,7 @@ namespace PayderPay.Application.Dtos.Payments;
 public class PaymentResponse
 {
     public Guid Id { get; set; }
+    public Guid DebtId { get; set; }
     public Guid SubscriptionId { get; set; }
     public decimal Amount { get; set; }
     public DateTime PaymentDateUtc { get; set; }

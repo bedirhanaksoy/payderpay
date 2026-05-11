@@ -1,11 +1,11 @@
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.External;
-using PayderPay.Application.Common;
 using PayderPay.Application.Dtos.Debts;
 using PayderPay.Application.Dtos.External;
 using PayderPay.Application.Common.Exceptions;
 using PayderPay.Domain.Entities;
 using PayderPay.Domain.Enums;
+using System.Net;
 
 namespace PayderPay.Application.Services;
 
@@ -28,13 +28,8 @@ public class DebtQueryService : IDebtQueryService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<DebtQueryResponse> QueryAsync(Guid subscriptionId, DebtQueryRequest request, CancellationToken cancellationToken = default)
+    public async Task<DebtQueryResponse> QueryAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
     {
-        if (request.PeriodYear.HasValue ^ request.PeriodMonth.HasValue)
-        {
-            throw new BadRequestException("PeriodYear and PeriodMonth must be provided together.");
-        }
-
         var subscription = await _subscriptionRepository.GetByIdAsync(subscriptionId, cancellationToken)
             ?? throw new NotFoundException($"Subscription '{subscriptionId}' was not found.");
 
@@ -43,67 +38,103 @@ public class DebtQueryService : IDebtQueryService
             throw new BadRequestException("Debt query can only be performed for active subscriptions.");
         }
 
-        var (periodYear, periodMonth) = BillingDateHelper.ResolvePeriod(request.PeriodYear, request.PeriodMonth);
-
         var providerRequest = new DebtProviderQueryRequest
         {
-            SubscriptionId = subscription.Id,
-            SubscriberNumber = subscription.SubscriberNumber,
-            ProviderName = subscription.ProviderName,
-            PeriodYear = periodYear,
-            PeriodMonth = periodMonth,
-            DueDayOfMonth = subscription.DueDayOfMonth
+            SubscriberNumber = subscription.SubscriberNumber
         };
 
-        var providerResponse = await _debtProviderClient.QueryDebtAsync(providerRequest, cancellationToken);
-
-        var result = new DebtQueryResult
+        DebtProviderQueryResponse providerResponse;
+        try
         {
-            SubscriptionId = subscription.Id,
-            Amount = providerResponse.Amount,
-            DueDate = providerResponse.DueDate,
-            PeriodYear = providerResponse.PeriodYear,
-            PeriodMonth = providerResponse.PeriodMonth,
-            QueriedAtUtc = DateTime.UtcNow,
-            ProviderRef = providerResponse.ProviderRef
-        };
-
-        await _debtQueryResultRepository.AddAsync(result, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return new DebtQueryResponse
+            providerResponse = await _debtProviderClient.QueryDebtAsync(providerRequest, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            SubscriptionId = result.SubscriptionId,
-            Amount = result.Amount,
-            DueDate = result.DueDate,
-            PeriodYear = result.PeriodYear,
-            PeriodMonth = result.PeriodMonth,
-            QueriedAtUtc = result.QueriedAtUtc,
-            ProviderRef = result.ProviderRef
-        };
+            providerResponse = new DebtProviderQueryResponse
+            {
+                SubscriberNumber = subscription.SubscriberNumber,
+                Debts = Array.Empty<DebtProviderDebtItem>()
+            };
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new BadRequestException("Debt query request is invalid.");
+        }
+
+        var queriedAtUtc = DateTime.UtcNow;
+        var currentSnapshots = providerResponse.Debts
+            .Select(item => new DebtQueryResult
+            {
+                DebtId = item.DebtId,
+                SubscriptionId = subscription.Id,
+                SubscriberNumber = string.IsNullOrWhiteSpace(providerResponse.SubscriberNumber)
+                    ? subscription.SubscriberNumber
+                    : providerResponse.SubscriberNumber,
+                Amount = item.Amount,
+                DueDate = item.DueDate,
+                PeriodYear = item.PeriodYear,
+                PeriodMonth = item.PeriodMonth,
+                QueriedAtUtc = queriedAtUtc,
+                ProviderRef = item.ProviderRef,
+                ProviderName = string.IsNullOrWhiteSpace(item.ProviderName)
+                    ? subscription.ProviderName
+                    : item.ProviderName
+            })
+            .ToList();
+
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await _debtQueryResultRepository.SoftDeleteCurrentBySubscriptionAsync(subscription.Id, cancellationToken);
+
+            if (currentSnapshots.Count > 0)
+            {
+                await _debtQueryResultRepository.AddRangeAsync(currentSnapshots, cancellationToken);
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+        }
+        catch
+        {
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
+        }
+
+        return BuildResponse(subscription, currentSnapshots);
     }
 
-    public async Task<IReadOnlyList<DebtQueryHistoryItemResponse>> GetHistoryAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    public async Task<DebtQueryResponse> GetCurrentAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
     {
-        var subscription = await _subscriptionRepository.GetByIdAsync(subscriptionId, cancellationToken)
-            ?? throw new NotFoundException($"Subscription '{subscriptionId}' was not found.");
+        return await QueryAsync(subscriptionId, cancellationToken);
+    }
 
-        _ = subscription;
-
-        var items = await _debtQueryResultRepository.GetHistoryBySubscriptionAsync(subscriptionId, cancellationToken);
-
-        return items
+    private static DebtQueryResponse BuildResponse(Subscription subscription, IReadOnlyList<DebtQueryResult> items)
+    {
+        var debts = items
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.PeriodYear)
+            .ThenBy(x => x.PeriodMonth)
             .Select(x => new DebtQueryHistoryItemResponse
             {
-                Id = x.Id,
+                DebtId = x.DebtId,
                 SubscriptionId = x.SubscriptionId,
+                SubscriberNumber = x.SubscriberNumber,
                 Amount = x.Amount,
                 DueDate = x.DueDate,
                 PeriodYear = x.PeriodYear,
                 PeriodMonth = x.PeriodMonth,
                 QueriedAtUtc = x.QueriedAtUtc,
-                ProviderRef = x.ProviderRef
+                ProviderRef = x.ProviderRef,
+                ProviderName = x.ProviderName
             })
             .ToList();
+
+        return new DebtQueryResponse
+        {
+            SubscriptionId = subscription.Id,
+            SubscriberNumber = subscription.SubscriberNumber,
+            Debts = debts
+        };
     }
 }

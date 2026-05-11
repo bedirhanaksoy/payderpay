@@ -1,6 +1,0 @@
-@PayderPay.MockApi_HostAddress = http://localhost:0
-
-GET {{PayderPay.MockApi_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

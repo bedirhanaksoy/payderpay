@@ -30,6 +30,7 @@ public class ExceptionHandlingMiddleware
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         var (statusCode, title) = MapException(exception);
+        var detail = BuildClientDetail(statusCode, exception);
 
         if (statusCode == HttpStatusCode.InternalServerError)
         {
@@ -48,7 +49,7 @@ public class ExceptionHandlingMiddleware
             type = $"https://httpstatuses.com/{(int)statusCode}",
             title,
             status = (int)statusCode,
-            detail = exception.Message,
+            detail,
             traceId = context.TraceIdentifier
         };
 
@@ -64,9 +65,21 @@ public class ExceptionHandlingMiddleware
             NotFoundException => (HttpStatusCode.NotFound, "Resource Not Found"),
             ConflictException => (HttpStatusCode.Conflict, "Conflict"),
             BadRequestException => (HttpStatusCode.BadRequest, "Bad Request"),
+            HttpRequestException => (HttpStatusCode.BadGateway, "External Service Error"),
             InvalidOperationException => (HttpStatusCode.BadRequest, "Bad Request"),
             ArgumentException => (HttpStatusCode.BadRequest, "Bad Request"),
             _ => (HttpStatusCode.InternalServerError, "Internal Server Error")
+        };
+    }
+
+    private static string BuildClientDetail(HttpStatusCode statusCode, Exception exception)
+    {
+        return exception switch
+        {
+            UnauthorizedException or NotFoundException or ConflictException or BadRequestException => exception.Message,
+            HttpRequestException => "External service is temporarily unavailable.",
+            _ when statusCode == HttpStatusCode.InternalServerError => "An unexpected server error occurred.",
+            _ => exception.Message
         };
     }
 }

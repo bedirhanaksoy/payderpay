@@ -8,7 +8,7 @@ public class PayderPayDesignTimeDbContextFactory : IDesignTimeDbContextFactory<P
     public PayderPayDbContext CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<PayderPayDbContext>();
-        optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=payderpay;Username=postgres;Password=postgres");
+        optionsBuilder.UseNpgsql("Host=localhost;Port=5157;Database=payderpay_dev;Username=postgres;Password=postgres");
 
         return new PayderPayDbContext(optionsBuilder.Options);
     }

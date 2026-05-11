@@ -7,11 +7,11 @@ public class CreatePaymentRequestValidator : RequestValidator<CreatePaymentReque
 {
     protected override IReadOnlyDictionary<string, string[]> Validate(CreatePaymentRequest request)
     {
-        if (request.DebtQueryResultId == Guid.Empty)
+        if (request.DebtId == Guid.Empty)
         {
             return new Dictionary<string, string[]>
             {
-                [nameof(request.DebtQueryResultId)] = ["DebtQueryResultId is required."]
+                [nameof(request.DebtId)] = ["DebtId is required."]
             };
         }
 

@@ -3,10 +3,6 @@ namespace PayderPay.Application.Dtos.Debts;
 public class DebtQueryResponse
 {
     public Guid SubscriptionId { get; set; }
-    public decimal Amount { get; set; }
-    public DateOnly DueDate { get; set; }
-    public int PeriodYear { get; set; }
-    public int PeriodMonth { get; set; }
-    public DateTime QueriedAtUtc { get; set; }
-    public string? ProviderRef { get; set; }
+    public string SubscriberNumber { get; set; } = string.Empty;
+    public IReadOnlyList<DebtQueryHistoryItemResponse> Debts { get; set; } = Array.Empty<DebtQueryHistoryItemResponse>();
 }

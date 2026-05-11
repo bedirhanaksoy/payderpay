@@ -20,17 +20,16 @@ public class SubscriptionDebtQueriesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<DebtQueryResponse>> QueryDebt(
         Guid subscriptionId,
-        [FromBody] DebtQueryRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _debtQueryService.QueryAsync(subscriptionId, request, cancellationToken);
+        var result = await _debtQueryService.QueryAsync(subscriptionId, cancellationToken);
         return Ok(result);
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<DebtQueryHistoryItemResponse>>> GetHistory(Guid subscriptionId, CancellationToken cancellationToken)
+    public async Task<ActionResult<DebtQueryResponse>> GetHistory(Guid subscriptionId, CancellationToken cancellationToken)
     {
-        var result = await _debtQueryService.GetHistoryAsync(subscriptionId, cancellationToken);
+        var result = await _debtQueryService.GetCurrentAsync(subscriptionId, cancellationToken);
         return Ok(result);
     }
 }

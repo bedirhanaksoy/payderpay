@@ -30,7 +30,7 @@ export default function LoginPage() {
       session.save(user)
       navigate('/dashboard', { replace: true })
     } catch (error) {
-      setSubmitError(errorMessage(error))
+      setSubmitError(errorMessage(error, 'auth_login'))
     } finally {
       setIsSubmitting(false)
     }

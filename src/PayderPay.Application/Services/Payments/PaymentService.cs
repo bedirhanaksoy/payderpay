@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Dtos.External;
@@ -11,26 +13,38 @@ namespace PayderPay.Application.Services;
 public class PaymentService : IPaymentService
 {
     private readonly ISubscriptionRepository _subscriptionRepository;
+    private readonly IDebtQueryService _debtQueryService;
     private readonly IDebtQueryResultRepository _debtQueryResultRepository;
     private readonly IMainAccountRepository _mainAccountRepository;
     private readonly IPaymentRepository _paymentRepository;
+    private readonly INotificationLogRepository _notificationLogRepository;
     private readonly IPaymentGatewayClient _paymentGatewayClient;
+    private readonly IEmailNotificationService _emailNotificationService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<PaymentService> _logger;
 
     public PaymentService(
         ISubscriptionRepository subscriptionRepository,
+        IDebtQueryService debtQueryService,
         IDebtQueryResultRepository debtQueryResultRepository,
         IMainAccountRepository mainAccountRepository,
         IPaymentRepository paymentRepository,
+        INotificationLogRepository notificationLogRepository,
         IPaymentGatewayClient paymentGatewayClient,
-        IUnitOfWork unitOfWork)
+        IEmailNotificationService emailNotificationService,
+        IUnitOfWork unitOfWork,
+        ILogger<PaymentService> logger)
     {
         _subscriptionRepository = subscriptionRepository;
+        _debtQueryService = debtQueryService;
         _debtQueryResultRepository = debtQueryResultRepository;
         _mainAccountRepository = mainAccountRepository;
         _paymentRepository = paymentRepository;
+        _notificationLogRepository = notificationLogRepository;
         _paymentGatewayClient = paymentGatewayClient;
+        _emailNotificationService = emailNotificationService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     public async Task<PaymentResponse> CreateAsync(Guid subscriptionId, CreatePaymentRequest request, CancellationToken cancellationToken = default)
@@ -43,29 +57,44 @@ public class PaymentService : IPaymentService
             throw new BadRequestException("Payment can only be created for active subscriptions.");
         }
 
-        var debt = await _debtQueryResultRepository.GetByIdAsync(request.DebtQueryResultId, cancellationToken)
-            ?? throw new NotFoundException($"Debt query result '{request.DebtQueryResultId}' was not found.");
+        var debtSnapshotBeforeValidation = await _debtQueryResultRepository.GetCurrentBySubscriptionAndDebtIdAsync(
+            subscriptionId,
+            request.DebtId,
+            cancellationToken)
+            ?? await ThrowDebtConflictAsync(request.DebtId, cancellationToken);
 
-        if (debt.SubscriptionId != subscription.Id)
+        var refreshedDebtState = await _debtQueryService.QueryAsync(subscriptionId, cancellationToken);
+        var validatedDebt = refreshedDebtState.Debts.FirstOrDefault(x => x.DebtId == request.DebtId);
+
+        if (validatedDebt is null)
         {
-            throw new BadRequestException("Debt query result does not belong to the requested subscription.");
+            throw new ConflictException("Debt changed. Please refresh and try again.");
         }
 
-        var hasSuccessfulPayment = await _paymentRepository.HasSuccessfulPaymentForPeriodAsync(
-            subscriptionId,
-            debt.PeriodYear,
-            debt.PeriodMonth,
+        if (validatedDebt.Amount != debtSnapshotBeforeValidation.Amount)
+        {
+            throw new ConflictException("Debt amount changed. Please refresh and try again.");
+        }
+
+        var hasSuccessfulPayment = await _paymentRepository.HasSuccessfulPaymentForDebtIdAsync(
+            request.DebtId,
             cancellationToken);
 
         if (hasSuccessfulPayment)
         {
-            throw new ConflictException("A successful payment already exists for this subscription and period.");
+            throw new ConflictException("A successful payment already exists for this debt.");
         }
+
+        var currentDebtSnapshot = await _debtQueryResultRepository.GetCurrentBySubscriptionAndDebtIdAsync(
+            subscriptionId,
+            request.DebtId,
+            cancellationToken)
+            ?? throw new ConflictException("Debt changed. Please refresh and try again.");
 
         var mainAccount = await _mainAccountRepository.GetByCustomerIdAsync(subscription.CustomerId, cancellationToken)
             ?? throw new NotFoundException($"Main account for customer '{subscription.CustomerId}' was not found.");
 
-        if (mainAccount.Balance < debt.Amount)
+        if (mainAccount.Balance < validatedDebt.Amount)
         {
             throw new ConflictException("Insufficient balance in the main account.");
         }
@@ -73,20 +102,19 @@ public class PaymentService : IPaymentService
         var gatewayResponse = await _paymentGatewayClient.ProcessPaymentAsync(
             new PaymentGatewayRequest
             {
-                SubscriptionId = subscription.Id,
-                Amount = debt.Amount,
-                PeriodYear = debt.PeriodYear,
-                PeriodMonth = debt.PeriodMonth
+                DebtId = request.DebtId,
+                Amount = validatedDebt.Amount
             },
             cancellationToken);
 
         var payment = new Payment
         {
+            DebtId = request.DebtId,
             SubscriptionId = subscription.Id,
-            Amount = debt.Amount,
+            Amount = validatedDebt.Amount,
             PaymentDateUtc = DateTime.UtcNow,
-            PeriodYear = debt.PeriodYear,
-            PeriodMonth = debt.PeriodMonth,
+            PeriodYear = validatedDebt.PeriodYear,
+            PeriodMonth = validatedDebt.PeriodMonth,
             Status = gatewayResponse.IsSuccessful ? PaymentStatus.Successful : PaymentStatus.Failed,
             ExternalTransactionId = gatewayResponse.ExternalTransactionId,
             FailureReason = gatewayResponse.FailureReason
@@ -98,8 +126,13 @@ public class PaymentService : IPaymentService
         {
             if (gatewayResponse.IsSuccessful)
             {
-                mainAccount.Balance -= debt.Amount;
+                mainAccount.Balance -= validatedDebt.Amount;
                 _mainAccountRepository.Update(mainAccount);
+
+                currentDebtSnapshot.IsDeleted = true;
+                currentDebtSnapshot.DeletedAtUtc = DateTime.UtcNow;
+                currentDebtSnapshot.UpdatedAtUtc = DateTime.UtcNow;
+                _debtQueryResultRepository.Update(currentDebtSnapshot);
             }
 
             await _paymentRepository.AddAsync(payment, cancellationToken);
@@ -112,9 +145,12 @@ public class PaymentService : IPaymentService
             throw;
         }
 
+        await SendReceiptEmailAsync(subscription, payment, cancellationToken);
+
         return new PaymentResponse
         {
             Id = payment.Id,
+            DebtId = payment.DebtId,
             SubscriptionId = payment.SubscriptionId,
             Amount = payment.Amount,
             PaymentDateUtc = payment.PaymentDateUtc,
@@ -124,6 +160,61 @@ public class PaymentService : IPaymentService
             ExternalTransactionId = payment.ExternalTransactionId,
             FailureReason = payment.FailureReason
         };
+    }
+
+    private async Task<DebtQueryResult> ThrowDebtConflictAsync(Guid debtId, CancellationToken cancellationToken)
+    {
+        if (await _paymentRepository.HasSuccessfulPaymentForDebtIdAsync(debtId, cancellationToken))
+        {
+            throw new ConflictException("A successful payment already exists for this debt.");
+        }
+
+        throw new ConflictException("Debt changed. Please refresh and try again.");
+    }
+
+    private async Task SendReceiptEmailAsync(Subscription subscription, Payment payment, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var dispatch = await _emailNotificationService.SendPaymentReceiptAsync(
+                new PaymentReceiptRequest(
+                    ToEmail: subscription.Customer.Email,
+                    CustomerName: subscription.Customer.FullName,
+                    SubscriptionType: subscription.SubscriptionType,
+                    ProviderName: subscription.ProviderName,
+                    SubscriberNumber: subscription.SubscriberNumber,
+                    Amount: payment.Amount,
+                    PaidAtUtc: payment.PaymentDateUtc,
+                    PeriodYear: payment.PeriodYear,
+                    PeriodMonth: payment.PeriodMonth,
+                    Status: payment.Status,
+                    ExternalTransactionId: payment.ExternalTransactionId,
+                    FailureReason: payment.FailureReason),
+                cancellationToken);
+
+            var log = new NotificationLog
+            {
+                CustomerId = subscription.CustomerId,
+                SubscriptionId = subscription.Id,
+                PeriodYear = payment.PeriodYear,
+                PeriodMonth = payment.PeriodMonth,
+                Channel = NotificationChannel.Email,
+                Recipient = subscription.Customer.Email,
+                Subject = dispatch.Subject,
+                Message = dispatch.Body,
+                Status = dispatch.Sent ? NotificationStatus.Sent : NotificationStatus.Failed,
+                SentAtUtc = dispatch.SentAtUtc,
+                FailureReason = dispatch.FailureReason
+            };
+
+            await _notificationLogRepository.AddAsync(log, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Receipt mailing must never break the payment response.
+            _logger.LogError(ex, "Failed to send/persist payment receipt for payment {PaymentId}", payment.Id);
+        }
     }
 
     public async Task<IReadOnlyList<PaymentHistoryItemResponse>> GetBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
@@ -151,6 +242,7 @@ public class PaymentService : IPaymentService
         return new PaymentHistoryItemResponse
         {
             Id = payment.Id,
+            DebtId = payment.DebtId,
             SubscriptionId = payment.SubscriptionId,
             Amount = payment.Amount,
             PaymentDateUtc = payment.PaymentDateUtc,

@@ -15,6 +15,13 @@ public class DebtQueryResultConfiguration : IEntityTypeConfiguration<DebtQueryRe
 
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.DebtId)
+            .IsRequired();
+
+        builder.Property(x => x.SubscriberNumber)
+            .HasMaxLength(100)
+            .IsRequired();
+
         builder.Property(x => x.Amount)
             .HasPrecision(18, 2)
             .IsRequired();
@@ -35,11 +42,19 @@ public class DebtQueryResultConfiguration : IEntityTypeConfiguration<DebtQueryRe
         builder.Property(x => x.ProviderRef)
             .HasMaxLength(100);
 
+        builder.Property(x => x.ProviderName)
+            .HasMaxLength(200)
+            .IsRequired();
+
         builder.Property(x => x.CreatedAtUtc)
             .IsRequired();
 
         builder.Property(x => x.UpdatedAtUtc)
             .IsRequired();
+
+        builder.HasIndex(x => new { x.SubscriptionId, x.DebtId })
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
 
         builder.HasIndex(x => new { x.SubscriptionId, x.QueriedAtUtc });
 

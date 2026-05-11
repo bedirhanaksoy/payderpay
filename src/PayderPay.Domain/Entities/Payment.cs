@@ -5,6 +5,7 @@ namespace PayderPay.Domain.Entities;
 
 public class Payment : BaseEntity
 {
+    public Guid DebtId { get; set; }
     public Guid SubscriptionId { get; set; }
     public decimal Amount { get; set; }
     public DateTime PaymentDateUtc { get; set; }

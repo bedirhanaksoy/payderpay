@@ -8,5 +8,6 @@ public interface IPaymentRepository
     Task<IReadOnlyList<Payment>> GetBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Payment>> GetByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task<bool> HasSuccessfulPaymentForPeriodAsync(Guid subscriptionId, int periodYear, int periodMonth, CancellationToken cancellationToken = default);
+    Task<bool> HasSuccessfulPaymentForDebtIdAsync(Guid debtId, CancellationToken cancellationToken = default);
     Task AddAsync(Payment payment, CancellationToken cancellationToken = default);
 }

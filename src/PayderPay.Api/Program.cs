@@ -18,7 +18,7 @@ var allowedOrigins = (configuredOrigins is { Length: > 0 } ? configuredOrigins :
 
 if (allowedOrigins.Length == 0)
 {
-    allowedOrigins = ["http://localhost:5141"];
+    allowedOrigins = ["http://localhost:5159"];
 }
 
 builder.Services.AddControllers(options =>

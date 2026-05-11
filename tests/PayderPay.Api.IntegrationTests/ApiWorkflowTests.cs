@@ -25,29 +25,31 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
         var customer = await CreateCustomerAsync(initialBalance: 1000m);
         var subscription = await CreateSubscriptionAsync(customer.Id);
 
-        var debtForFailedPayment = await QueryDebtAsync(subscription.Id, 2026, 2);
+        var debtSnapshot = await QueryDebtAsync(subscription.Id);
+        var debtForFailedPayment = debtSnapshot.Debts.First(x => x.PeriodYear == 2026 && x.PeriodMonth == 2);
         var failedPaymentResponse = await _client.PostAsJsonAsync(
             $"/api/subscriptions/{subscription.Id}/payments",
-            new CreatePaymentRequest { DebtQueryResultId = debtForFailedPayment.Id });
+            new CreatePaymentRequest { DebtId = debtForFailedPayment.DebtId });
 
         Assert.Equal(HttpStatusCode.OK, failedPaymentResponse.StatusCode);
         var failedPayment = await failedPaymentResponse.Content.ReadFromJsonAsync<PaymentResponse>();
         Assert.NotNull(failedPayment);
         Assert.Equal(PaymentStatus.Failed, failedPayment!.Status);
 
-        var debtForSuccess = await QueryDebtAsync(subscription.Id, 2026, 3);
+        var debtForSuccess = debtSnapshot.Debts.First(x => x.PeriodYear == 2026 && x.PeriodMonth == 3);
         var successPaymentResponse = await _client.PostAsJsonAsync(
             $"/api/subscriptions/{subscription.Id}/payments",
-            new CreatePaymentRequest { DebtQueryResultId = debtForSuccess.Id });
+            new CreatePaymentRequest { DebtId = debtForSuccess.DebtId });
 
         Assert.Equal(HttpStatusCode.OK, successPaymentResponse.StatusCode);
         var successPayment = await successPaymentResponse.Content.ReadFromJsonAsync<PaymentResponse>();
         Assert.NotNull(successPayment);
         Assert.Equal(PaymentStatus.Successful, successPayment!.Status);
+        Assert.Equal(debtForSuccess.DebtId, successPayment.DebtId);
 
         var duplicateSuccessResponse = await _client.PostAsJsonAsync(
             $"/api/subscriptions/{subscription.Id}/payments",
-            new CreatePaymentRequest { DebtQueryResultId = debtForSuccess.Id });
+            new CreatePaymentRequest { DebtId = debtForSuccess.DebtId });
 
         Assert.Equal(HttpStatusCode.Conflict, duplicateSuccessResponse.StatusCode);
 
@@ -84,11 +86,12 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
     {
         var customer = await CreateCustomerAsync(initialBalance: 50m);
         var subscription = await CreateSubscriptionAsync(customer.Id);
-        var debt = await QueryDebtAsync(subscription.Id, 2026, 4);
+        var debtSnapshot = await QueryDebtAsync(subscription.Id);
+        var debt = debtSnapshot.Debts.First(x => x.PeriodYear == 2026 && x.PeriodMonth == 2);
 
         var paymentResponse = await _client.PostAsJsonAsync(
             $"/api/subscriptions/{subscription.Id}/payments",
-            new CreatePaymentRequest { DebtQueryResultId = debt.Id });
+            new CreatePaymentRequest { DebtId = debt.DebtId });
 
         Assert.Equal(HttpStatusCode.Conflict, paymentResponse.StatusCode);
 
@@ -147,24 +150,19 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
         return subscription!;
     }
 
-    private async Task<DebtQueryHistoryItemResponse> QueryDebtAsync(Guid subscriptionId, int year, int month)
+    private async Task<DebtQueryResponse> QueryDebtAsync(Guid subscriptionId)
     {
-        var queryResponse = await _client.PostAsJsonAsync(
-            $"/api/subscriptions/{subscriptionId}/debt-queries",
-            new DebtQueryRequest { PeriodYear = year, PeriodMonth = month });
+        var queryResponse = await _client.PostAsJsonAsync($"/api/subscriptions/{subscriptionId}/debt-queries", new DebtQueryRequest());
 
         Assert.Equal(HttpStatusCode.OK, queryResponse.StatusCode);
 
         var historyResponse = await _client.GetAsync($"/api/subscriptions/{subscriptionId}/debt-queries");
         Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
 
-        var history = await historyResponse.Content.ReadFromJsonAsync<List<DebtQueryHistoryItemResponse>>();
-        Assert.NotNull(history);
-
-        var item = history!
-            .FirstOrDefault(x => x.PeriodYear == year && x.PeriodMonth == month);
-
-        Assert.NotNull(item);
-        return item!;
+        var snapshot = await historyResponse.Content.ReadFromJsonAsync<DebtQueryResponse>();
+        Assert.NotNull(snapshot);
+        Assert.NotNull(snapshot!.Debts);
+        Assert.NotEmpty(snapshot.Debts);
+        return snapshot;
     }
 }

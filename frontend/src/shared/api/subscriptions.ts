@@ -1,7 +1,6 @@
 import { apiClient } from './client'
 import type {
   CreateSubscriptionRequest,
-  DebtQueryHistoryItemResponse,
   DebtQueryRequest,
   DebtQueryResponse,
   PaymentHistoryItemResponse,
@@ -43,7 +42,7 @@ export const subscriptionsApi = {
     return response.data
   },
 
-  queryDebt: async (subscriptionId: string, payload: DebtQueryRequest) => {
+  queryDebt: async (subscriptionId: string, payload: DebtQueryRequest = {}) => {
     const response = await apiClient.post<DebtQueryResponse>(
       `/api/subscriptions/${subscriptionId}/debt-queries`,
       payload,
@@ -52,15 +51,15 @@ export const subscriptionsApi = {
   },
 
   getDebtHistory: async (subscriptionId: string) => {
-    const response = await apiClient.get<DebtQueryHistoryItemResponse[]>(
+    const response = await apiClient.get<DebtQueryResponse>(
       `/api/subscriptions/${subscriptionId}/debt-queries`,
     )
     return response.data
   },
 
-  createPayment: async (subscriptionId: string, debtQueryResultId: string) => {
+  createPayment: async (subscriptionId: string, debtId: string) => {
     const response = await apiClient.post<PaymentResponse>(`/api/subscriptions/${subscriptionId}/payments`, {
-      debtQueryResultId,
+      debtId,
     })
     return response.data
   },

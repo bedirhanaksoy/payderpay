@@ -42,11 +42,11 @@ function SubscriptionForm({ defaultValues, isEdit, isPending, error, onSubmit }:
     defaultValues,
   })
 
-  const apiError = error ? parseProblemDetails(error) : null
+  const apiError = error ? parseProblemDetails(error, 'subscription') : null
 
   return (
     <form className="form" onSubmit={handleSubmit(onSubmit)}>
-      {apiError && <div className="alert alert-error">{apiError.detail ?? apiError.title}</div>}
+      {apiError && <div className="alert alert-error">{apiError.userMessage}</div>}
 
       <Field label="Subscription type" error={errors.subscriptionType?.message}>
         <Select error={!!errors.subscriptionType} {...register('subscriptionType', { valueAsNumber: true })}>

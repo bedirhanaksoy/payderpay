@@ -33,7 +33,7 @@ export default function RegisterPage() {
       session.save(user)
       navigate('/dashboard', { replace: true })
     } catch (error) {
-      setSubmitError(errorMessage(error))
+      setSubmitError(errorMessage(error, 'auth_register'))
     } finally {
       setIsSubmitting(false)
     }

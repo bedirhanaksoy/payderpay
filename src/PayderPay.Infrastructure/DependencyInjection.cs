@@ -7,10 +7,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using PayderPay.Application.Common.Interfaces.External;
+using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.Security;
 using PayderPay.Application.Common.Settings;
+using PayderPay.Infrastructure.BackgroundJobs;
 using PayderPay.Infrastructure.ExternalServices;
+using PayderPay.Infrastructure.Notifications;
 using PayderPay.Infrastructure.Persistence;
 using PayderPay.Infrastructure.Repositories;
 using PayderPay.Infrastructure.Security;
@@ -22,7 +25,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=payderpay;Username=postgres;Password=postgres";
+            ?? "Host=localhost;Port=5157;Database=payderpay_dev;Username=postgres;Password=postgres";
 
         services.AddDbContext<PayderPayDbContext>(options => options.UseNpgsql(connectionString));
 
@@ -34,13 +37,13 @@ public static class DependencyInjection
         services.AddHttpClient<IDebtProviderClient, DebtProviderClient>((sp, client) =>
         {
             var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ExternalServiceSettings>>().Value;
-            client.BaseAddress = new Uri(settings.MockApiBaseUrl);
+            client.BaseAddress = EnsureTrailingSlashUri(settings.MockApiBaseUrl);
         });
 
         services.AddHttpClient<IPaymentGatewayClient, PaymentGatewayClient>((sp, client) =>
         {
             var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ExternalServiceSettings>>().Value;
-            client.BaseAddress = new Uri(settings.MockApiBaseUrl);
+            client.BaseAddress = EnsureTrailingSlashUri(settings.MockApiBaseUrl);
         });
 
         services.AddScoped<ICustomerRepository, CustomerRepository>();
@@ -54,8 +57,11 @@ public static class DependencyInjection
         services.AddScoped<IIbanGenerator, IbanGenerator>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+        services.AddHostedService<ReminderBackgroundService>();
 
         services.AddJwtBearerAuthentication(configuration);
         services.AddAuthorization();
@@ -112,5 +118,21 @@ public static class DependencyInjection
         {
             context.Fail("Customer account is inactive.");
         }
+    }
+
+    private static Uri EnsureTrailingSlashUri(string rawBaseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rawBaseUrl))
+        {
+            throw new InvalidOperationException("ExternalServices:MockApiBaseUrl is required.");
+        }
+
+        var normalized = rawBaseUrl.Trim();
+        if (!normalized.EndsWith('/'))
+        {
+            normalized += "/";
+        }
+
+        return new Uri(normalized, UriKind.Absolute);
     }
 }

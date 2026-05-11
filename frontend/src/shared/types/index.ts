@@ -55,38 +55,34 @@ export interface UpdateSubscriptionRequest {
   dueDayOfMonth: number
 }
 
-export interface DebtQueryRequest {
-  periodYear?: number
-  periodMonth?: number
+export interface DebtQueryRequest {}
+
+export interface DebtItemResponse {
+  debtId: string
+  subscriptionId: string
+  subscriberNumber: string
+  amount: number
+  dueDate: string
+  periodYear: number
+  periodMonth: number
+  queriedAtUtc: string
+  providerRef?: string
+  providerName: string
 }
 
 export interface DebtQueryResponse {
   subscriptionId: string
-  amount: number
-  dueDate: string
-  periodYear: number
-  periodMonth: number
-  queriedAtUtc: string
-  providerRef?: string
-}
-
-export interface DebtQueryHistoryItemResponse {
-  id: string
-  subscriptionId: string
-  amount: number
-  dueDate: string
-  periodYear: number
-  periodMonth: number
-  queriedAtUtc: string
-  providerRef?: string
+  subscriberNumber: string
+  debts: DebtItemResponse[]
 }
 
 export interface CreatePaymentRequest {
-  debtQueryResultId: string
+  debtId: string
 }
 
 export interface PaymentResponse {
   id: string
+  debtId: string
   subscriptionId: string
   amount: number
   paymentDateUtc: string
@@ -99,6 +95,7 @@ export interface PaymentResponse {
 
 export interface PaymentHistoryItemResponse {
   id: string
+  debtId: string
   subscriptionId: string
   amount: number
   paymentDateUtc: string

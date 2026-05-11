@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using PayderPay.Application.Common.Interfaces.Security;
 using PayderPay.Application.Common.Interfaces.Validation;
 using PayderPay.Application.Services;
+using PayderPay.Application.Services.Reminders;
 using PayderPay.Application.Validators.Auth;
 using PayderPay.Application.Validators.Customers;
 using PayderPay.Application.Validators.Debts;
@@ -20,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<IDebtQueryService, DebtQueryService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<ISummaryService, SummaryService>();
+        services.AddScoped<IReminderService, ReminderService>();
 
         services.AddScoped<IRequestValidator, RegisterRequestValidator>();
         services.AddScoped<IRequestValidator, LoginRequestValidator>();

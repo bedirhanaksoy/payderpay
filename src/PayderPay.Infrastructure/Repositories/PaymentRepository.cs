@@ -51,6 +51,14 @@ public class PaymentRepository : IPaymentRepository
             cancellationToken);
     }
 
+    public async Task<bool> HasSuccessfulPaymentForDebtIdAsync(Guid debtId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Payments.AnyAsync(
+            x => x.DebtId == debtId &&
+                 x.Status == PaymentStatus.Successful,
+            cancellationToken);
+    }
+
     public async Task AddAsync(Payment payment, CancellationToken cancellationToken = default)
     {
         await _context.Payments.AddAsync(payment, cancellationToken);
