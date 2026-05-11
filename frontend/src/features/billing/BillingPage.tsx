@@ -30,17 +30,20 @@ export default function BillingPage() {
   )
 
   const [subscriptionId, setSubscriptionId] = useState(searchParams.get('subscriptionId') ?? '')
+  const [historySubscriptionId, setHistorySubscriptionId] = useState(searchParams.get('subscriptionId') ?? '')
 
   useEffect(() => {
     if (!subscriptionId && activeSubscriptions.length > 0) {
-      setSubscriptionId(activeSubscriptions[0].id)
-      setSearchParams({ subscriptionId: activeSubscriptions[0].id })
+      const initialSubscriptionId = activeSubscriptions[0].id
+      setSubscriptionId(initialSubscriptionId)
+      setHistorySubscriptionId(initialSubscriptionId)
+      setSearchParams({ subscriptionId: initialSubscriptionId })
     }
   }, [activeSubscriptions, searchParams, setSearchParams, subscriptionId])
 
   const debtHistoryQuery = useQuery({
-    queryKey: ['debt-history', subscriptionId],
-    queryFn: () => subscriptionsApi.getDebtHistory(subscriptionId),
+    queryKey: ['debt-history', historySubscriptionId],
+    queryFn: () => subscriptionsApi.getDebtHistory(historySubscriptionId),
     enabled: false,
   })
 
@@ -49,12 +52,12 @@ export default function BillingPage() {
 
   useEffect(() => {
     setPaymentHistoryPage(1)
-  }, [subscriptionId])
+  }, [historySubscriptionId])
 
   const paymentHistoryQuery = useQuery({
-    queryKey: ['subscription-payments', subscriptionId, paymentHistoryPage, paymentHistoryPageSize],
-    queryFn: () => subscriptionsApi.getPaymentHistory(subscriptionId, paymentHistoryPage, paymentHistoryPageSize),
-    enabled: !!subscriptionId,
+    queryKey: ['subscription-payments', historySubscriptionId, paymentHistoryPage, paymentHistoryPageSize],
+    queryFn: () => subscriptionsApi.getPaymentHistory(historySubscriptionId, paymentHistoryPage, paymentHistoryPageSize),
+    enabled: !!historySubscriptionId,
     placeholderData: previous => previous,
   })
 
@@ -81,6 +84,7 @@ export default function BillingPage() {
       setQueryError(null)
       setQuerySuccess(response.debts.length === 0 ? 'No unpaid debt found for selected subscription.' : 'Debt list updated.')
       queryClient.setQueryData(['debt-history', subscriptionId], response)
+      setHistorySubscriptionId(subscriptionId)
     },
     onError: error => {
       setQuerySuccess(null)
@@ -196,7 +200,6 @@ export default function BillingPage() {
                   setPaymentError(null)
                   setPaymentSuccess(null)
                   setConfirmDebt(null)
-                  queryClient.removeQueries({ queryKey: ['debt-history', nextValue] })
                   if (nextValue) {
                     setSearchParams({ subscriptionId: nextValue })
                   }
