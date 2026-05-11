@@ -89,6 +89,34 @@ public class SmtpEmailNotificationService : IEmailNotificationService
         return SendAsync(request.ToEmail, subject, body, cancellationToken);
     }
 
+    public Task<EmailDispatchResult> SendInvoiceDueReminderAsync(
+        InvoiceDueReminderRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var subject = $"[{request.ProviderName}] Son ödeme tarihiniz yaklaşıyor";
+        var customerName = HtmlEncoder.Default.Encode(request.CustomerName);
+        var providerName = HtmlEncoder.Default.Encode(request.ProviderName);
+        var subscriberNumber = HtmlEncoder.Default.Encode(request.SubscriberNumber);
+        var amount = HtmlEncoder.Default.Encode($"{request.Amount:N2} {request.Currency}");
+        var dueDate = HtmlEncoder.Default.Encode(request.DueDate.ToString("dd MMMM yyyy", TurkishCulture));
+        var daysLeft = request.DaysLeft < 0 ? 0 : request.DaysLeft;
+
+        var body =
+            "<p>Sayın <strong>" + customerName + "</strong>,</p>" +
+            "<p><strong>" + providerName + "</strong> aboneliğiniz için son ödeme tarihi yaklaşıyor.</p>" +
+            "<table style=\"border-collapse:collapse;\">" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Abonelik</td><td style=\"padding:4px 12px;\">" + providerName + "</td></tr>" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Abone No</td><td style=\"padding:4px 12px;\">" + subscriberNumber + "</td></tr>" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Tutar</td><td style=\"padding:4px 12px;font-weight:700;\">" + amount + "</td></tr>" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Son Ödeme Tarihi</td><td style=\"padding:4px 12px;\">" + dueDate + "</td></tr>" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Kalan Gün</td><td style=\"padding:4px 12px;\">" + daysLeft + "</td></tr>" +
+            "</table>" +
+            "<p>Ödeme yaptıysanız bu mesajı dikkate almayınız.</p>" +
+            "<p style=\"color:#999;font-size:12px;\">Bu bildirim PayderPay tarafından otomatik gönderilmiştir.</p>";
+
+        return SendAsync(request.ToEmail, subject, body, cancellationToken);
+    }
+
     private async Task<EmailDispatchResult> SendAsync(
         string recipient,
         string subject,

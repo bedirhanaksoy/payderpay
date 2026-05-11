@@ -19,6 +19,13 @@ public interface IEmailNotificationService
     Task<EmailDispatchResult> SendPaymentReceiptAsync(
         PaymentReceiptRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends an invoice reminder from queue-based due date notification pipeline.
+    /// </summary>
+    Task<EmailDispatchResult> SendInvoiceDueReminderAsync(
+        InvoiceDueReminderRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record UpcomingPaymentReminderRequest(
@@ -45,6 +52,16 @@ public sealed record PaymentReceiptRequest(
     PaymentStatus Status,
     string? ExternalTransactionId,
     string? FailureReason);
+
+public sealed record InvoiceDueReminderRequest(
+    string ToEmail,
+    string CustomerName,
+    string ProviderName,
+    string SubscriberNumber,
+    decimal Amount,
+    string Currency,
+    DateOnly DueDate,
+    int DaysLeft);
 
 /// <summary>
 /// Result of an email dispatch attempt. Callers use it to write a NotificationLog row

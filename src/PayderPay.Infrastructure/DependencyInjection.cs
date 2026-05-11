@@ -1,10 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Notifications;
@@ -34,6 +38,9 @@ public static class DependencyInjection
         services.Configure<ExternalServiceSettings>(configuration.GetSection(ExternalServiceSettings.SectionName));
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
 
+        services.AddHangfire(config => config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
+        services.AddHangfireServer();
+
         services.AddHttpClient<IDebtProviderClient, DebtProviderClient>((sp, client) =>
         {
             var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ExternalServiceSettings>>().Value;
@@ -51,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IDebtQueryResultRepository, DebtQueryResultRepository>();
+        services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<INotificationQueueRepository, NotificationQueueRepository>();
         services.AddScoped<INotificationLogRepository, NotificationLogRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -60,13 +69,44 @@ public static class DependencyInjection
         services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
-
-        services.AddHostedService<ReminderBackgroundService>();
+        services.AddTransient<InvoiceSyncJob>();
+        services.AddTransient<NotificationDeliveryJob>();
 
         services.AddJwtBearerAuthentication(configuration);
         services.AddAuthorization();
 
         return services;
+    }
+
+    public static IApplicationBuilder UseInfrastructureJobs(this IApplicationBuilder app)
+    {
+        using var scope = app.ApplicationServices.CreateScope();
+        var settings = scope.ServiceProvider.GetRequiredService<IOptions<ReminderJobSettings>>().Value;
+
+        if (!settings.Enabled)
+        {
+            return app;
+        }
+
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+        var options = new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.Utc
+        };
+
+        recurringJobs.AddOrUpdate<InvoiceSyncJob>(
+            "invoice-sync-job",
+            job => job.ExecuteAsync(),
+            settings.InvoiceSyncCron,
+            options);
+
+        recurringJobs.AddOrUpdate<NotificationDeliveryJob>(
+            "notification-delivery-job",
+            job => job.ExecuteAsync(),
+            settings.NotificationDeliveryCron,
+            options);
+
+        return app;
     }
 
     private static void AddJwtBearerAuthentication(this IServiceCollection services, IConfiguration configuration)

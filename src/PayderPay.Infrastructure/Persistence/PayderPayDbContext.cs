@@ -17,6 +17,8 @@ public class PayderPayDbContext : DbContext
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<DebtQueryResult> DebtQueryResults => Set<DebtQueryResult>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<NotificationQueueItem> NotificationQueueItems => Set<NotificationQueueItem>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

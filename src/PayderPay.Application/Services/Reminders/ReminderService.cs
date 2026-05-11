@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Notifications;
@@ -12,27 +13,33 @@ namespace PayderPay.Application.Services.Reminders;
 
 public class ReminderService : IReminderService
 {
+    private const string DueReminderType = "due_reminder_3d";
+    private const string DefaultCurrency = "TRY";
+
     private readonly ISubscriptionRepository _subscriptionRepository;
-    private readonly IPaymentRepository _paymentRepository;
-    private readonly INotificationLogRepository _notificationLogRepository;
     private readonly IDebtProviderClient _debtProviderClient;
+    private readonly IInvoiceRepository _invoiceRepository;
+    private readonly INotificationQueueRepository _notificationQueueRepository;
+    private readonly IPaymentRepository _paymentRepository;
     private readonly IEmailNotificationService _emailNotificationService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ReminderService> _logger;
 
     public ReminderService(
         ISubscriptionRepository subscriptionRepository,
-        IPaymentRepository paymentRepository,
-        INotificationLogRepository notificationLogRepository,
         IDebtProviderClient debtProviderClient,
+        IInvoiceRepository invoiceRepository,
+        INotificationQueueRepository notificationQueueRepository,
+        IPaymentRepository paymentRepository,
         IEmailNotificationService emailNotificationService,
         IUnitOfWork unitOfWork,
         ILogger<ReminderService> logger)
     {
         _subscriptionRepository = subscriptionRepository;
-        _paymentRepository = paymentRepository;
-        _notificationLogRepository = notificationLogRepository;
         _debtProviderClient = debtProviderClient;
+        _invoiceRepository = invoiceRepository;
+        _notificationQueueRepository = notificationQueueRepository;
+        _paymentRepository = paymentRepository;
         _emailNotificationService = emailNotificationService;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -43,135 +50,431 @@ public class ReminderService : IReminderService
         int leadDays = 3,
         CancellationToken cancellationToken = default)
     {
-        var safeLeadDays = leadDays < 0 ? 0 : leadDays;
-        var subscriptions = await _subscriptionRepository.GetDueSubscriptionsAsync(referenceDate, safeLeadDays, cancellationToken);
-        var results = new List<SendReminderResultResponse>(subscriptions.Count);
+        var runResult = await RunInvoiceSyncAndDeliveryAsync(referenceDate, leadDays, 3, cancellationToken);
 
-        var periodYear = referenceDate.Year;
-        var periodMonth = referenceDate.Month;
+        return
+        [
+            new SendReminderResultResponse
+            {
+                CustomerId = Guid.Empty,
+                SubscriptionId = Guid.Empty,
+                PeriodYear = referenceDate.Year,
+                PeriodMonth = referenceDate.Month,
+                Sent = runResult.NotificationDelivery.SentCount > 0,
+                Message = $"Sync subscriptions: {runResult.InvoiceSync.ProcessedSubscriptions}, Sent mails: {runResult.NotificationDelivery.SentCount}",
+                ProcessedAtUtc = DateTime.UtcNow
+            }
+        ];
+    }
 
-        foreach (var subscription in subscriptions)
+    public async Task<ReminderRunResponse> RunInvoiceSyncAndDeliveryAsync(
+        DateOnly referenceDate,
+        int leadDays = 3,
+        int maxAttempts = 3,
+        CancellationToken cancellationToken = default)
+    {
+        var syncResult = await RunInvoiceSyncAsync(referenceDate, leadDays, cancellationToken);
+        var deliveryResult = await RunNotificationDeliveryAsync(referenceDate, maxAttempts, cancellationToken);
+
+        return new ReminderRunResponse
         {
-            var processedAt = DateTime.UtcNow;
-            var result = new SendReminderResultResponse
-            {
-                CustomerId = subscription.CustomerId,
-                SubscriptionId = subscription.Id,
-                PeriodYear = periodYear,
-                PeriodMonth = periodMonth,
-                ProcessedAtUtc = processedAt
-            };
+            InvoiceSync = syncResult,
+            NotificationDelivery = deliveryResult
+        };
+    }
 
-            // Skip if already paid for this period.
-            var subscriptionPayments = await _paymentRepository.GetBySubscriptionAsync(subscription.Id, cancellationToken);
-            var alreadyPaid = subscriptionPayments.Any(x =>
-                x.Status == PaymentStatus.Successful &&
-                x.PeriodYear == periodYear &&
-                x.PeriodMonth == periodMonth);
-            if (alreadyPaid)
-            {
-                result.Sent = false;
-                result.Message = "Bu dönem için ödeme zaten yapılmış. Hatırlatma atlanmıştır.";
-                results.Add(result);
-                continue;
-            }
+    public async Task<InvoiceSyncRunResultResponse> RunInvoiceSyncAsync(
+        DateOnly referenceDate,
+        int leadDays = 3,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new InvoiceSyncRunResultResponse();
+        var safeLeadDays = Math.Max(0, leadDays);
+        var activeSubscriptions = await _subscriptionRepository.GetActiveAsync(cancellationToken);
 
-            // Skip if a reminder for this period was already sent (idempotency).
-            var alreadyReminded = await _notificationLogRepository.HasSentReminderForPeriodAsync(
-                subscription.Id, periodYear, periodMonth, cancellationToken);
-            if (alreadyReminded)
-            {
-                result.Sent = false;
-                result.Message = "Bu dönem için hatırlatma daha önce gönderilmiş.";
-                results.Add(result);
-                continue;
-            }
+        result.ProcessedSubscriptions = activeSubscriptions.Count;
 
-            // Pull current debt amount from the 3rd-party debt provider.
-            decimal amount;
-            DateOnly dueDate;
+        foreach (var subscription in activeSubscriptions)
+        {
             try
             {
-                var debtResponse = await _debtProviderClient.QueryDebtAsync(new DebtProviderQueryRequest
-                {
-                    SubscriberNumber = subscription.SubscriberNumber
-                }, cancellationToken);
+                await SyncSubscriptionInvoicesAsync(subscription, referenceDate, result, cancellationToken);
+                result.SucceededSubscriptions++;
+            }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                result.ErrorCount++;
+                result.ShortCircuited = true;
 
-                var debt = debtResponse.Debts
-                    .OrderBy(x => x.DueDate)
-                    .ThenBy(x => x.PeriodYear)
-                    .ThenBy(x => x.PeriodMonth)
-                    .FirstOrDefault();
+                _logger.LogError(
+                    ex,
+                    "Invoice sync short-circuited due to timeout for subscription {SubscriptionId}.",
+                    subscription.Id);
+                break;
+            }
+            catch (HttpRequestException ex) when (IsProviderUnavailable(ex))
+            {
+                result.ErrorCount++;
+                result.ShortCircuited = true;
 
-                if (debt is null)
-                {
-                    result.Sent = false;
-                    result.Message = "Abonelik için ödenmemiş borç bulunamadı.";
-                    results.Add(result);
-                    continue;
-                }
-
-                amount = debt.Amount;
-                dueDate = debt.DueDate;
+                _logger.LogError(
+                    ex,
+                    "Invoice sync short-circuited due to provider unavailability for subscription {SubscriptionId}.",
+                    subscription.Id);
+                break;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex,
-                    "Debt query failed for subscription {SubscriptionId}; reminder skipped.", subscription.Id);
-                result.Sent = false;
-                result.Message = $"Borç sorgulama başarısız oldu: {ex.Message}";
-                results.Add(result);
+                result.FailedSubscriptions++;
+                result.ErrorCount++;
+
+                _logger.LogWarning(
+                    ex,
+                    "Invoice sync failed for subscription {SubscriptionId}. Continuing with next subscription.",
+                    subscription.Id);
+            }
+        }
+
+        await ScheduleReminderQueueAsync(referenceDate, safeLeadDays, result, cancellationToken);
+
+        _logger.LogInformation(
+            "Invoice sync completed. Processed={Processed}, Success={Success}, Failed={Failed}, Created={Created}, Updated={Updated}, MarkedPaid={MarkedPaid}, Queued={Queued}, Errors={Errors}, ShortCircuited={ShortCircuited}",
+            result.ProcessedSubscriptions,
+            result.SucceededSubscriptions,
+            result.FailedSubscriptions,
+            result.CreatedInvoices,
+            result.UpdatedInvoices,
+            result.MarkedPaidInvoices,
+            result.QueuedNotifications,
+            result.ErrorCount,
+            result.ShortCircuited);
+
+        return result;
+    }
+
+    public async Task<NotificationDeliveryRunResultResponse> RunNotificationDeliveryAsync(
+        DateOnly referenceDate,
+        int maxAttempts = 3,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new NotificationDeliveryRunResultResponse();
+        var safeMaxAttempts = Math.Max(1, maxAttempts);
+
+        var pendingItems = await _notificationQueueRepository.GetPendingForDeliveryAsync(referenceDate, safeMaxAttempts, cancellationToken);
+
+        foreach (var pending in pendingItems)
+        {
+            result.ProcessedItems++;
+
+            try
+            {
+                var processed = await ProcessNotificationItemAsync(pending.Id, referenceDate, safeMaxAttempts, cancellationToken);
+
+                switch (processed)
+                {
+                    case DeliveryOutcome.Sent:
+                        result.SentCount++;
+                        break;
+                    case DeliveryOutcome.PendingForRetry:
+                        result.FailedCount++;
+                        result.PendingForRetryCount++;
+                        break;
+                    case DeliveryOutcome.Failed:
+                        result.FailedCount++;
+                        break;
+                    case DeliveryOutcome.MaxRetryReached:
+                        result.FailedCount++;
+                        result.MaxRetryReachedCount++;
+                        break;
+                    case DeliveryOutcome.SkippedClosedOrPaid:
+                        result.SkippedClosedOrPaidCount++;
+                        break;
+                    case DeliveryOutcome.LockNotAcquired:
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                result.ErrorCount++;
+                _logger.LogError(ex, "Notification delivery failed for queue item {QueueItemId}.", pending.Id);
+            }
+        }
+
+        _logger.LogInformation(
+            "Notification delivery completed. Processed={Processed}, Sent={Sent}, Failed={Failed}, RetryPending={RetryPending}, MaxRetry={MaxRetry}, Skipped={Skipped}, Errors={Errors}",
+            result.ProcessedItems,
+            result.SentCount,
+            result.FailedCount,
+            result.PendingForRetryCount,
+            result.MaxRetryReachedCount,
+            result.SkippedClosedOrPaidCount,
+            result.ErrorCount);
+
+        return result;
+    }
+
+    private async Task SyncSubscriptionInvoicesAsync(
+        Subscription subscription,
+        DateOnly referenceDate,
+        InvoiceSyncRunResultResponse result,
+        CancellationToken cancellationToken)
+    {
+        DebtProviderQueryResponse providerResponse;
+        try
+        {
+            providerResponse = await _debtProviderClient.QueryDebtAsync(new DebtProviderQueryRequest
+            {
+                SubscriberNumber = subscription.SubscriberNumber
+            }, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            providerResponse = new DebtProviderQueryResponse
+            {
+                SubscriberNumber = subscription.SubscriberNumber,
+                Debts = Array.Empty<DebtProviderDebtItem>()
+            };
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var currentExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var debt in providerResponse.Debts)
+        {
+            var externalId = debt.DebtId.ToString("D");
+            currentExternalIds.Add(externalId);
+
+            var existing = await _invoiceRepository.GetBySubscriptionAndExternalIdAsync(subscription.Id, externalId, cancellationToken);
+            if (existing is null)
+            {
+                var invoice = new Invoice
+                {
+                    SubscriptionId = subscription.Id,
+                    UserId = subscription.CustomerId,
+                    ExternalId = externalId,
+                    DueDate = debt.DueDate,
+                    Amount = debt.Amount,
+                    Currency = DefaultCurrency,
+                    Status = ResolveInvoiceStatus(debt.DueDate, referenceDate),
+                    FetchedAt = nowUtc,
+                    CreatedAt = nowUtc,
+                    UpdatedAt = nowUtc
+                };
+
+                await _invoiceRepository.AddAsync(invoice, cancellationToken);
+                result.CreatedInvoices++;
                 continue;
             }
 
-            var dispatch = await _emailNotificationService.SendUpcomingPaymentReminderAsync(
-                new UpcomingPaymentReminderRequest(
-                    ToEmail: subscription.Customer.Email,
-                    CustomerName: subscription.Customer.FullName,
-                    SubscriptionType: subscription.SubscriptionType,
-                    ProviderName: subscription.ProviderName,
-                    SubscriberNumber: subscription.SubscriberNumber,
-                    Amount: amount,
-                    DueDate: dueDate,
-                    PeriodYear: periodYear,
-                    PeriodMonth: periodMonth),
-                cancellationToken);
+            existing.DueDate = debt.DueDate;
+            existing.Amount = debt.Amount;
+            existing.Currency = DefaultCurrency;
+            existing.Status = ResolveInvoiceStatus(debt.DueDate, referenceDate);
+            existing.FetchedAt = nowUtc;
+            existing.UpdatedAt = nowUtc;
 
-            await PersistNotificationLogAsync(subscription, periodYear, periodMonth, dispatch, cancellationToken);
-
-            result.Sent = dispatch.Sent;
-            result.Message = dispatch.Sent
-                ? "Hatırlatma e-postası gönderildi."
-                : $"E-posta gönderilemedi: {dispatch.FailureReason}";
-            results.Add(result);
+            _invoiceRepository.Update(existing);
+            result.UpdatedInvoices++;
         }
 
-        return results;
+        var knownInvoices = await _invoiceRepository.GetBySubscriptionAsync(subscription.Id, cancellationToken);
+        foreach (var knownInvoice in knownInvoices)
+        {
+            if (knownInvoice.Status != InvoiceStatus.Unpaid)
+            {
+                continue;
+            }
+
+            if (currentExternalIds.Contains(knownInvoice.ExternalId))
+            {
+                continue;
+            }
+
+            knownInvoice.Status = InvoiceStatus.Paid;
+            knownInvoice.UpdatedAt = nowUtc;
+            _invoiceRepository.Update(knownInvoice);
+            result.MarkedPaidInvoices++;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task PersistNotificationLogAsync(
-        Subscription subscription,
-        int periodYear,
-        int periodMonth,
-        EmailDispatchResult dispatch,
+    private async Task ScheduleReminderQueueAsync(
+        DateOnly referenceDate,
+        int leadDays,
+        InvoiceSyncRunResultResponse result,
         CancellationToken cancellationToken)
     {
-        var log = new NotificationLog
-        {
-            CustomerId = subscription.CustomerId,
-            SubscriptionId = subscription.Id,
-            PeriodYear = periodYear,
-            PeriodMonth = periodMonth,
-            Channel = NotificationChannel.Email,
-            Recipient = subscription.Customer.Email,
-            Subject = dispatch.Subject,
-            Message = dispatch.Body,
-            Status = dispatch.Sent ? NotificationStatus.Sent : NotificationStatus.Failed,
-            SentAtUtc = dispatch.SentAtUtc,
-            FailureReason = dispatch.FailureReason
-        };
+        var toDate = referenceDate.AddDays(leadDays);
+        var dueInvoices = await _invoiceRepository.GetUnpaidDueBetweenAsync(referenceDate, toDate, cancellationToken);
 
-        await _notificationLogRepository.AddAsync(log, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        foreach (var invoice in dueInvoices)
+        {
+            try
+            {
+                var scheduledFor = invoice.DueDate.AddDays(-3);
+                if (scheduledFor < referenceDate)
+                {
+                    scheduledFor = referenceDate;
+                }
+
+                var queueItem = new NotificationQueueItem
+                {
+                    InvoiceId = invoice.Id,
+                    UserId = invoice.UserId,
+                    NotificationType = DueReminderType,
+                    IdempotencyKey = BuildIdempotencyKey(invoice.Id),
+                    Status = NotificationQueueStatus.Pending,
+                    ScheduledFor = scheduledFor,
+                    Attempts = 0,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                var inserted = await _notificationQueueRepository.TryEnqueueAsync(queueItem, cancellationToken);
+                if (inserted)
+                {
+                    result.QueuedNotifications++;
+                }
+            }
+            catch (Exception ex)
+            {
+                result.ErrorCount++;
+                _logger.LogWarning(ex, "Queue scheduling failed for invoice {InvoiceId}.", invoice.Id);
+            }
+        }
+    }
+
+    private async Task<DeliveryOutcome> ProcessNotificationItemAsync(
+        Guid queueItemId,
+        DateOnly today,
+        int maxAttempts,
+        CancellationToken cancellationToken)
+    {
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var lockAcquired = await _notificationQueueRepository.TryMarkSendingAsync(queueItemId, cancellationToken);
+            if (!lockAcquired)
+            {
+                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+                return DeliveryOutcome.LockNotAcquired;
+            }
+
+            var queueItem = await _notificationQueueRepository.GetByIdWithRelationsAsync(queueItemId, cancellationToken);
+            if (queueItem is null)
+            {
+                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+                return DeliveryOutcome.LockNotAcquired;
+            }
+
+            if (await ShouldSkipBecauseAlreadyClosedOrPaidAsync(queueItem.Invoice, cancellationToken))
+            {
+                queueItem.Status = NotificationQueueStatus.Failed;
+                queueItem.LastError = "already_paid_or_closed";
+                _notificationQueueRepository.Update(queueItem);
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await _unitOfWork.CommitTransactionAsync(cancellationToken);
+                return DeliveryOutcome.SkippedClosedOrPaid;
+            }
+
+            var daysLeft = Math.Max(0, queueItem.Invoice.DueDate.DayNumber - today.DayNumber);
+            var dispatch = await _emailNotificationService.SendInvoiceDueReminderAsync(
+                new InvoiceDueReminderRequest(
+                    ToEmail: queueItem.User.Email,
+                    CustomerName: queueItem.User.FullName,
+                    ProviderName: queueItem.Invoice.Subscription.ProviderName,
+                    SubscriberNumber: queueItem.Invoice.Subscription.SubscriberNumber,
+                    Amount: queueItem.Invoice.Amount,
+                    Currency: queueItem.Invoice.Currency,
+                    DueDate: queueItem.Invoice.DueDate,
+                    DaysLeft: daysLeft),
+                cancellationToken);
+
+            if (dispatch.Sent)
+            {
+                queueItem.Status = NotificationQueueStatus.Sent;
+                queueItem.SentAt = dispatch.SentAtUtc ?? DateTime.UtcNow;
+                queueItem.LastError = null;
+                _notificationQueueRepository.Update(queueItem);
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await _unitOfWork.CommitTransactionAsync(cancellationToken);
+                return DeliveryOutcome.Sent;
+            }
+
+            queueItem.Attempts += 1;
+            queueItem.LastError = dispatch.FailureReason ?? "mail_send_failed";
+
+            if (queueItem.Attempts >= maxAttempts)
+            {
+                queueItem.Status = NotificationQueueStatus.Failed;
+                _notificationQueueRepository.Update(queueItem);
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await _unitOfWork.CommitTransactionAsync(cancellationToken);
+                return DeliveryOutcome.MaxRetryReached;
+            }
+
+            queueItem.Status = NotificationQueueStatus.Pending;
+            _notificationQueueRepository.Update(queueItem);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+            return DeliveryOutcome.PendingForRetry;
+        }
+        catch
+        {
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task<bool> ShouldSkipBecauseAlreadyClosedOrPaidAsync(Invoice invoice, CancellationToken cancellationToken)
+    {
+        if (invoice.Status != InvoiceStatus.Unpaid)
+        {
+            return true;
+        }
+
+        if (!Guid.TryParse(invoice.ExternalId, out var debtId))
+        {
+            return false;
+        }
+
+        return await _paymentRepository.HasSuccessfulPaymentForDebtIdAsync(debtId, cancellationToken);
+    }
+
+    private static InvoiceStatus ResolveInvoiceStatus(DateOnly dueDate, DateOnly referenceDate)
+    {
+        if (dueDate < referenceDate)
+        {
+            return InvoiceStatus.Overdue;
+        }
+
+        return InvoiceStatus.Unpaid;
+    }
+
+    private static bool IsProviderUnavailable(HttpRequestException exception)
+    {
+        if (!exception.StatusCode.HasValue)
+        {
+            return true;
+        }
+
+        return (int)exception.StatusCode.Value >= 500;
+    }
+
+    private static string BuildIdempotencyKey(Guid invoiceId) => $"{invoiceId:D}__{DueReminderType}";
+
+    private enum DeliveryOutcome
+    {
+        LockNotAcquired = 0,
+        Sent = 1,
+        PendingForRetry = 2,
+        Failed = 3,
+        MaxRetryReached = 4,
+        SkippedClosedOrPaid = 5
     }
 }

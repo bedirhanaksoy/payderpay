@@ -15,5 +15,6 @@ public class Subscription : BaseEntity
     public Customer Customer { get; set; } = null!;
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
     public ICollection<DebtQueryResult> DebtQueryResults { get; set; } = new List<DebtQueryResult>();
+    public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
     public ICollection<NotificationLog> NotificationLogs { get; set; } = new List<NotificationLog>();
 }

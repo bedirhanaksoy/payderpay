@@ -470,6 +470,18 @@ public class PaymentServiceTests
                 SentAtUtc: DateTime.UtcNow,
                 FailureReason: null));
         }
+
+        public Task<EmailDispatchResult> SendInvoiceDueReminderAsync(
+            InvoiceDueReminderRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new EmailDispatchResult(
+                Sent: true,
+                Subject: "Invoice due",
+                Body: "Invoice due body",
+                SentAtUtc: DateTime.UtcNow,
+                FailureReason: null));
+        }
     }
 
     private sealed class FakePaymentGatewayClient : IPaymentGatewayClient

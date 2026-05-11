@@ -22,21 +22,19 @@ public class RemindersController : ControllerBase
     }
 
     /// <summary>
-    /// Manually scans active subscriptions whose due date falls within <c>leadDays</c> from
-    /// <c>referenceDate</c> (defaults to today and the configured lead days), queries the
-    /// 3rd-party debt provider, and sends a reminder email per subscription. Idempotent:
-    /// reminders already sent for the current period are skipped.
+    /// Test/operations endpoint. Manually runs invoice sync and notification delivery once.
     /// </summary>
     [HttpPost("run")]
-    public async Task<ActionResult<IReadOnlyList<SendReminderResultResponse>>> Run(
-        [FromQuery] DateOnly? referenceDate,
-        [FromQuery] int? leadDays,
+    public async Task<ActionResult<ReminderRunResponse>> Run(
         CancellationToken cancellationToken)
     {
-        var date = referenceDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        var lead = leadDays ?? _settings.Value.LeadDays;
+        var referenceDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        var result = await _reminderService.RunInvoiceSyncAndDeliveryAsync(
+            referenceDate,
+            _settings.Value.LeadDays,
+            _settings.Value.MaxAttempts,
+            cancellationToken);
 
-        var results = await _reminderService.SendDuePaymentRemindersAsync(date, lead, cancellationToken);
-        return Ok(results);
+        return Ok(result);
     }
 }
