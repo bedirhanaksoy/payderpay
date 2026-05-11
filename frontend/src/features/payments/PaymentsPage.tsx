@@ -5,6 +5,7 @@ import { getCurrentUserOrThrow } from '../../shared/auth/use-current-user'
 import { formatCurrency } from '../../shared/format/amount'
 import { formatDateTime } from '../../shared/format/dateTime'
 import { paymentStatusLabel } from '../../shared/format/enums'
+import Pagination from '../../components/Pagination'
 
 function currentUtcPeriod() {
   const now = new Date()
@@ -20,14 +21,17 @@ export default function PaymentsPage() {
 
   const [year, setYear] = useState(defaultPeriod.year)
   const [month, setMonth] = useState<number | 'all'>('all')
+  const [page, setPage] = useState(1)
+  const pageSize = 20
 
   const paymentsQuery = useQuery({
-    queryKey: ['payments', user.customerId],
-    queryFn: () => paymentsApi.getByCustomer(user.customerId),
+    queryKey: ['payments', user.customerId, page, pageSize],
+    queryFn: () => paymentsApi.getByCustomer(user.customerId, page, pageSize),
+    placeholderData: previous => previous,
   })
 
   const filtered = useMemo(() => {
-    const items = paymentsQuery.data ?? []
+    const items = paymentsQuery.data?.items ?? []
 
     return items.filter(item => {
       if (item.periodYear !== year) {
@@ -82,6 +86,7 @@ export default function PaymentsPage() {
           <div className="empty-state-text">No payment record for selected period.</div>
         </div>
       ) : (
+        <>
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -112,6 +117,14 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={paymentsQuery.data?.page ?? page}
+          totalPages={paymentsQuery.data?.totalPages ?? 0}
+          totalCount={paymentsQuery.data?.totalCount}
+          isFetching={paymentsQuery.isFetching}
+          onPageChange={setPage}
+        />
+        </>
       )}
     </>
   )

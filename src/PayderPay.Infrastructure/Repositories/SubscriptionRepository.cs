@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Domain.Entities;
 using PayderPay.Domain.Enums;
 using PayderPay.Infrastructure.Persistence;
@@ -42,6 +43,56 @@ public class SubscriptionRepository : ISubscriptionRepository
             .OrderBy(x => x.ProviderName)
             .ThenBy(x => x.SubscriberNumber)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedResult<Subscription>> GetByCustomerPagedAsync(
+        Guid customerId,
+        PageRequest page,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Subscriptions
+            .AsNoTracking()
+            .Where(x => x.CustomerId == customerId);
+
+        var total = await query.CountAsync(cancellationToken);
+        if (total == 0)
+        {
+            return PagedResult<Subscription>.Empty(page);
+        }
+
+        var items = await query
+            .OrderBy(x => x.ProviderName)
+            .ThenBy(x => x.SubscriberNumber)
+            .Skip(page.Skip)
+            .Take(page.NormalizedPageSize)
+            .ToListAsync(cancellationToken);
+
+        return PagedResult<Subscription>.From(items, total, page);
+    }
+
+    public async Task<PagedResult<Subscription>> GetActivePagedAsync(
+        PageRequest page,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Subscriptions
+            .AsNoTracking()
+            .Include(x => x.Customer)
+            .Where(x => x.Status == SubscriptionStatus.Active);
+
+        var total = await query.CountAsync(cancellationToken);
+        if (total == 0)
+        {
+            return PagedResult<Subscription>.Empty(page);
+        }
+
+        var items = await query
+            .OrderBy(x => x.ProviderName)
+            .ThenBy(x => x.SubscriberNumber)
+            .Skip(page.Skip)
+            .Take(page.NormalizedPageSize)
+            .ToListAsync(cancellationToken);
+
+        return PagedResult<Subscription>.From(items, total, page);
     }
 
     public async Task<IReadOnlyList<Subscription>> GetDueSubscriptionsAsync(DateOnly referenceDate, int leadDays, CancellationToken cancellationToken = default)

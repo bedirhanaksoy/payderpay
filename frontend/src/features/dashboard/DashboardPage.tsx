@@ -29,8 +29,8 @@ export default function DashboardPage() {
   })
 
   const subscriptionsQuery = useQuery({
-    queryKey: ['subscriptions', user.customerId],
-    queryFn: () => subscriptionsApi.listByCustomer(user.customerId),
+    queryKey: ['subscriptions', user.customerId, 'all'],
+    queryFn: () => subscriptionsApi.listAllByCustomer(user.customerId),
   })
 
   const activeSubscriptions = useMemo(

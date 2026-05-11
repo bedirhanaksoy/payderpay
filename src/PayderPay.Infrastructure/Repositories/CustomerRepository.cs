@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Domain.Entities;
 using PayderPay.Infrastructure.Persistence;
 
@@ -40,6 +41,27 @@ public class CustomerRepository : ICustomerRepository
             .AsNoTracking()
             .OrderBy(x => x.FullName)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedResult<Customer>> GetAllPagedAsync(
+        PageRequest page,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Customers.AsNoTracking();
+
+        var total = await query.CountAsync(cancellationToken);
+        if (total == 0)
+        {
+            return PagedResult<Customer>.Empty(page);
+        }
+
+        var items = await query
+            .OrderBy(x => x.FullName)
+            .Skip(page.Skip)
+            .Take(page.NormalizedPageSize)
+            .ToListAsync(cancellationToken);
+
+        return PagedResult<Customer>.From(items, total, page);
     }
 
     public async Task AddAsync(Customer customer, CancellationToken cancellationToken = default)

@@ -10,6 +10,6 @@ public interface ISubscriptionService
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionResponse>> GetByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionResponse>> GetActiveAsync(CancellationToken cancellationToken = default);
-    Task<PagedResult<SubscriptionResponse>> GetByCustomerPagedAsync(Guid customerId, int page, int pageSize, CancellationToken cancellationToken = default);
-    Task<PagedResult<SubscriptionResponse>> GetActivePagedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<PagedResult<SubscriptionResponse>> GetByCustomerPagedAsync(Guid customerId, PageRequest page, CancellationToken cancellationToken = default);
+    Task<PagedResult<SubscriptionResponse>> GetActivePagedAsync(PageRequest page, CancellationToken cancellationToken = default);
 }

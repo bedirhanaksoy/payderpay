@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PayderPay.Api.Extensions;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Payments;
 
@@ -30,7 +31,7 @@ public class PaymentsController : ControllerBase
             return BadRequest(new { Message = "Query parameter 'customerId' is required." });
         }
 
-        var result = await _paymentService.GetByCustomerPagedAsync(customerId.Value, page, pageSize, cancellationToken);
+        var result = await _paymentService.GetByCustomerPagedAsync(customerId.Value, new PageRequest(page, pageSize), cancellationToken);
         Response.AddPaginationHeaders(result);
         return Ok(result.Items);
     }

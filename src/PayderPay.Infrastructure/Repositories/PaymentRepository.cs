@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Domain.Entities;
 using PayderPay.Domain.Enums;
 using PayderPay.Infrastructure.Persistence;
@@ -39,6 +40,55 @@ public class PaymentRepository : IPaymentRepository
             .Where(x => x.Subscription.CustomerId == customerId)
             .OrderByDescending(x => x.PaymentDateUtc)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedResult<Payment>> GetBySubscriptionPagedAsync(
+        Guid subscriptionId,
+        PageRequest page,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Payments
+            .AsNoTracking()
+            .Where(x => x.SubscriptionId == subscriptionId);
+
+        var total = await query.CountAsync(cancellationToken);
+        if (total == 0)
+        {
+            return PagedResult<Payment>.Empty(page);
+        }
+
+        var items = await query
+            .OrderByDescending(x => x.PaymentDateUtc)
+            .Skip(page.Skip)
+            .Take(page.NormalizedPageSize)
+            .ToListAsync(cancellationToken);
+
+        return PagedResult<Payment>.From(items, total, page);
+    }
+
+    public async Task<PagedResult<Payment>> GetByCustomerPagedAsync(
+        Guid customerId,
+        PageRequest page,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Payments
+            .AsNoTracking()
+            .Include(x => x.Subscription)
+            .Where(x => x.Subscription.CustomerId == customerId);
+
+        var total = await query.CountAsync(cancellationToken);
+        if (total == 0)
+        {
+            return PagedResult<Payment>.Empty(page);
+        }
+
+        var items = await query
+            .OrderByDescending(x => x.PaymentDateUtc)
+            .Skip(page.Skip)
+            .Take(page.NormalizedPageSize)
+            .ToListAsync(cancellationToken);
+
+        return PagedResult<Payment>.From(items, total, page);
     }
 
     public async Task<bool> HasSuccessfulPaymentForPeriodAsync(Guid subscriptionId, int periodYear, int periodMonth, CancellationToken cancellationToken = default)

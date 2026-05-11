@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import SpinnerLabel from './SpinnerLabel'
 
 interface ModalProps {
   title: string
@@ -77,7 +78,7 @@ export function ConfirmModal({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? <span className="spin">◌</span> : confirmLabel}
+            <SpinnerLabel loading={loading ?? false}>{confirmLabel}</SpinnerLabel>
           </button>
         </>
       )}

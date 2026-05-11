@@ -111,21 +111,26 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<PagedResult<SubscriptionResponse>> GetByCustomerPagedAsync(
         Guid customerId,
-        int page,
-        int pageSize,
+        PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var items = await GetByCustomerAsync(customerId, cancellationToken);
-        return PaginationHelper.ToPaged(items, page, pageSize);
+        var customer = await _customerRepository.GetByIdAsync(customerId, cancellationToken)
+            ?? throw new NotFoundException($"Customer '{customerId}' was not found.");
+
+        _ = customer;
+
+        var paged = await _subscriptionRepository.GetByCustomerPagedAsync(customerId, page, cancellationToken);
+        var responses = await ToResponsesAsync(paged.Items, cancellationToken);
+        return paged.Map(responses);
     }
 
     public async Task<PagedResult<SubscriptionResponse>> GetActivePagedAsync(
-        int page,
-        int pageSize,
+        PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var items = await GetActiveAsync(cancellationToken);
-        return PaginationHelper.ToPaged(items, page, pageSize);
+        var paged = await _subscriptionRepository.GetActivePagedAsync(page, cancellationToken);
+        var responses = await ToResponsesAsync(paged.Items, cancellationToken);
+        return paged.Map(responses);
     }
 
     private async Task<IReadOnlyList<SubscriptionResponse>> ToResponsesAsync(

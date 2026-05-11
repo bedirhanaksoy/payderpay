@@ -3,6 +3,7 @@ using PayderPay.Application.Common.Exceptions;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.Debts;
 using PayderPay.Application.Dtos.External;
 using PayderPay.Application.Dtos.Payments;
@@ -238,6 +239,12 @@ public class PaymentServiceTests
         public Task<IReadOnlyList<Subscription>> GetActiveAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Subscription>>(Array.Empty<Subscription>());
 
+        public Task<PagedResult<Subscription>> GetByCustomerPagedAsync(Guid customerId, PageRequest page, CancellationToken cancellationToken = default) =>
+            Task.FromResult(PagedResult<Subscription>.Empty(page));
+
+        public Task<PagedResult<Subscription>> GetActivePagedAsync(PageRequest page, CancellationToken cancellationToken = default) =>
+            Task.FromResult(PagedResult<Subscription>.Empty(page));
+
         public Task<IReadOnlyList<Subscription>> GetDueSubscriptionsAsync(DateOnly referenceDate, int leadDays, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Subscription>>(Array.Empty<Subscription>());
 
@@ -395,6 +402,12 @@ public class PaymentServiceTests
 
         public Task<IReadOnlyList<Payment>> GetByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Payment>>(Array.Empty<Payment>());
+
+        public Task<PagedResult<Payment>> GetBySubscriptionPagedAsync(Guid subscriptionId, PageRequest page, CancellationToken cancellationToken = default) =>
+            Task.FromResult(PagedResult<Payment>.Empty(page));
+
+        public Task<PagedResult<Payment>> GetByCustomerPagedAsync(Guid customerId, PageRequest page, CancellationToken cancellationToken = default) =>
+            Task.FromResult(PagedResult<Payment>.Empty(page));
 
         public Task<bool> HasSuccessfulPaymentForPeriodAsync(Guid subscriptionId, int periodYear, int periodMonth, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);

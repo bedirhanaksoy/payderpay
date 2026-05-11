@@ -76,10 +76,11 @@ public class CustomerService : ICustomerService
         return customers.Select(ToResponse).ToList();
     }
 
-    public async Task<PagedResult<CustomerResponse>> GetAllPagedAsync(int page, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<CustomerResponse>> GetAllPagedAsync(PageRequest page, CancellationToken cancellationToken = default)
     {
-        var items = await GetAllAsync(cancellationToken);
-        return PaginationHelper.ToPaged(items, page, pageSize);
+        var paged = await _customerRepository.GetAllPagedAsync(page, cancellationToken);
+        var responses = paged.Items.Select(ToResponse).ToList();
+        return paged.Map(responses);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)

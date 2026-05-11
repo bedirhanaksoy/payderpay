@@ -1,6 +1,7 @@
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.Customers;
 using PayderPay.Application.Common.Exceptions;
 using PayderPay.Application.Services;
@@ -83,6 +84,14 @@ public class CustomerServiceTests
         public Task<IReadOnlyList<Customer>> GetAllAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<Customer>>(Customers);
+        }
+
+        public Task<PagedResult<Customer>> GetAllPagedAsync(PageRequest page, CancellationToken cancellationToken = default)
+        {
+            var ordered = Customers.OrderBy(x => x.FullName).ToList();
+            var total = ordered.Count;
+            var items = ordered.Skip(page.Skip).Take(page.NormalizedPageSize).ToList();
+            return Task.FromResult(PagedResult<Customer>.From(items, total, page));
         }
 
         public Task AddAsync(Customer customer, CancellationToken cancellationToken = default)

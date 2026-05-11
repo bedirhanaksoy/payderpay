@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { Field, Input } from '../../components/Field'
+import SpinnerLabel from '../../components/SpinnerLabel'
 import { authProvider } from '../../shared/auth/provider'
 import { session } from '../../shared/auth/session'
 import { loginSchema, type LoginFormValues } from './schemas'
@@ -71,7 +72,7 @@ export default function LoginPage() {
             style={{ justifyContent: 'center', marginTop: '0.5rem' }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? <span className="spin">◌</span> : 'Sign in'}
+            <SpinnerLabel loading={isSubmitting}>Sign in</SpinnerLabel>
           </button>
         </form>
 

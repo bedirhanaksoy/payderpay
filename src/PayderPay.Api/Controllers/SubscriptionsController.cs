@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PayderPay.Api.Extensions;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Subscriptions;
 using PayderPay.Application.Dtos.Summaries;
@@ -54,9 +55,23 @@ public class SubscriptionsController : ControllerBase
             return BadRequest(new { Message = "Query parameter 'customerId' is required." });
         }
 
-        var result = await _subscriptionService.GetByCustomerPagedAsync(customerId.Value, page, pageSize, cancellationToken);
+        var result = await _subscriptionService.GetByCustomerPagedAsync(customerId.Value, new PageRequest(page, pageSize), cancellationToken);
         Response.AddPaginationHeaders(result);
         return Ok(result.Items);
+    }
+
+    [HttpGet("all")]
+    public async Task<ActionResult<IReadOnlyList<SubscriptionResponse>>> GetAllByCustomer(
+        [FromQuery] Guid? customerId,
+        CancellationToken cancellationToken)
+    {
+        if (!customerId.HasValue)
+        {
+            return BadRequest(new { Message = "Query parameter 'customerId' is required." });
+        }
+
+        var result = await _subscriptionService.GetByCustomerAsync(customerId.Value, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("active")]
@@ -65,7 +80,7 @@ public class SubscriptionsController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        var result = await _subscriptionService.GetActivePagedAsync(page, pageSize, cancellationToken);
+        var result = await _subscriptionService.GetActivePagedAsync(new PageRequest(page, pageSize), cancellationToken);
         Response.AddPaginationHeaders(result);
         return Ok(result.Items);
     }

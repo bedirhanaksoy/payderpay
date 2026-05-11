@@ -242,22 +242,29 @@ public class PaymentService : IPaymentService
 
     public async Task<PagedResult<PaymentHistoryItemResponse>> GetBySubscriptionPagedAsync(
         Guid subscriptionId,
-        int page,
-        int pageSize,
+        PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var items = await GetBySubscriptionAsync(subscriptionId, cancellationToken);
-        return PaginationHelper.ToPaged(items, page, pageSize);
+        var subscription = await _subscriptionRepository.GetByIdAsync(subscriptionId, cancellationToken)
+            ?? throw new NotFoundException($"Subscription '{subscriptionId}' was not found.");
+
+        var paged = await _paymentRepository.GetBySubscriptionPagedAsync(subscriptionId, page, cancellationToken);
+        var responses = paged.Items
+            .Select(x => ToHistoryItem(x, subscription.SubscriberNumber))
+            .ToList();
+        return paged.Map(responses);
     }
 
     public async Task<PagedResult<PaymentHistoryItemResponse>> GetByCustomerPagedAsync(
         Guid customerId,
-        int page,
-        int pageSize,
+        PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var items = await GetByCustomerAsync(customerId, cancellationToken);
-        return PaginationHelper.ToPaged(items, page, pageSize);
+        var paged = await _paymentRepository.GetByCustomerPagedAsync(customerId, page, cancellationToken);
+        var responses = paged.Items
+            .Select(x => ToHistoryItem(x, x.Subscription.SubscriberNumber))
+            .ToList();
+        return paged.Map(responses);
     }
 
     private static PaymentHistoryItemResponse ToHistoryItem(Payment payment, string subscriberNumber)

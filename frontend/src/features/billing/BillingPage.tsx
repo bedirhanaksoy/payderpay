@@ -6,6 +6,8 @@ import { customersApi } from '../../shared/api/customers'
 import { getCurrentUserOrThrow } from '../../shared/auth/use-current-user'
 import { Field, Select } from '../../components/Field'
 import { Modal } from '../../components/Modal'
+import Pagination from '../../components/Pagination'
+import SpinnerLabel from '../../components/SpinnerLabel'
 import { formatCurrency } from '../../shared/format/amount'
 import { formatDateOnly, formatDateTime } from '../../shared/format/dateTime'
 import { paymentStatusLabel, subscriptionTypeLabel } from '../../shared/format/enums'
@@ -18,8 +20,8 @@ export default function BillingPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const subscriptionsQuery = useQuery({
-    queryKey: ['subscriptions', user.customerId],
-    queryFn: () => subscriptionsApi.listByCustomer(user.customerId),
+    queryKey: ['subscriptions', user.customerId, 'all'],
+    queryFn: () => subscriptionsApi.listAllByCustomer(user.customerId),
   })
 
   const activeSubscriptions = useMemo(
@@ -42,10 +44,18 @@ export default function BillingPage() {
     enabled: !!subscriptionId,
   })
 
+  const [paymentHistoryPage, setPaymentHistoryPage] = useState(1)
+  const paymentHistoryPageSize = 20
+
+  useEffect(() => {
+    setPaymentHistoryPage(1)
+  }, [subscriptionId])
+
   const paymentHistoryQuery = useQuery({
-    queryKey: ['subscription-payments', subscriptionId],
-    queryFn: () => subscriptionsApi.getPaymentHistory(subscriptionId),
+    queryKey: ['subscription-payments', subscriptionId, paymentHistoryPage, paymentHistoryPageSize],
+    queryFn: () => subscriptionsApi.getPaymentHistory(subscriptionId, paymentHistoryPage, paymentHistoryPageSize),
     enabled: !!subscriptionId,
+    placeholderData: previous => previous,
   })
 
   const accountQuery = useQuery({
@@ -118,7 +128,7 @@ export default function BillingPage() {
 
   const selectedSubscription = activeSubscriptions.find(x => x.id === subscriptionId)
   const debts = debtHistoryQuery.data?.debts ?? []
-  const payments = paymentHistoryQuery.data ?? []
+  const payments = paymentHistoryQuery.data?.items ?? []
 
   return (
     <>
@@ -180,8 +190,12 @@ export default function BillingPage() {
             </Field>
 
             <div className="filters-bar" style={{ marginBottom: 0 }}>
-              <button className="btn btn-primary" onClick={() => queryDebtMutation.mutate()} disabled={queryDebtMutation.isPending}>
-                {queryDebtMutation.isPending ? <span className="spin">◌</span> : 'Query debt'}
+              <button
+                className="btn btn-primary"
+                onClick={() => queryDebtMutation.mutate()}
+                disabled={queryDebtMutation.isPending}
+              >
+                <SpinnerLabel loading={queryDebtMutation.isPending}>Query debt</SpinnerLabel>
               </button>
             </div>
 
@@ -236,7 +250,7 @@ export default function BillingPage() {
                           onClick={() => setConfirmDebt(debt)}
                           disabled={payMutation.isPending}
                         >
-                          {payMutation.isPending ? <span className="spin">◌</span> : 'Pay'}
+                          <SpinnerLabel loading={payMutation.isPending}>Pay</SpinnerLabel>
                         </button>
                       </td>
                     </tr>
@@ -288,6 +302,15 @@ export default function BillingPage() {
               </table>
             </div>
           )}
+          {paymentHistoryQuery.data && (
+            <Pagination
+              page={paymentHistoryQuery.data.page}
+              totalPages={paymentHistoryQuery.data.totalPages}
+              totalCount={paymentHistoryQuery.data.totalCount}
+              isFetching={paymentHistoryQuery.isFetching}
+              onPageChange={setPaymentHistoryPage}
+            />
+          )}
         </div>
       </div>
 
@@ -315,7 +338,7 @@ export default function BillingPage() {
                 onClick={() => payMutation.mutate(confirmDebt.debtId)}
                 disabled={payMutation.isPending}
               >
-                {payMutation.isPending ? <span className="spin">◌</span> : 'Confirm payment'}
+                <SpinnerLabel loading={payMutation.isPending}>Confirm payment</SpinnerLabel>
               </button>
             </>
           )}

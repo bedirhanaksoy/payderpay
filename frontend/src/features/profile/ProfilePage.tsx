@@ -111,7 +111,7 @@ export default function ProfilePage() {
       {parsedDeleteError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{parsedDeleteError.userMessage}</div>}
 
       <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>
-        Close Account (Soft Delete Customer)
+        Close Account
       </button>
 
       {showDeleteConfirm && (

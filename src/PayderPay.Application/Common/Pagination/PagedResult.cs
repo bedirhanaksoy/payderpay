@@ -1,44 +1,24 @@
 namespace PayderPay.Application.Common.Pagination;
 
-public sealed class PagedResult<T>
+public sealed record PagedResult<T>(
+    IReadOnlyList<T> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages)
 {
-    public required IReadOnlyList<T> Items { get; init; }
-    public required int Page { get; init; }
-    public required int PageSize { get; init; }
-    public required int TotalCount { get; init; }
-    public int TotalPages { get; init; }
-}
+    public static PagedResult<T> Empty(PageRequest page) =>
+        new(Array.Empty<T>(), page.NormalizedPage, page.NormalizedPageSize, 0, 0);
 
-public static class PaginationHelper
-{
-    public const int DefaultPage = 1;
-    public const int DefaultPageSize = 20;
-    public const int MaxPageSize = 100;
-
-    public static PagedResult<T> ToPaged<T>(IReadOnlyList<T> source, int page, int pageSize)
+    public static PagedResult<T> From(IReadOnlyList<T> items, int totalCount, PageRequest page)
     {
-        var normalizedPage = page < 1 ? DefaultPage : page;
-        var normalizedPageSize = pageSize < 1
-            ? DefaultPageSize
-            : Math.Min(pageSize, MaxPageSize);
-
-        var totalCount = source.Count;
         var totalPages = totalCount == 0
             ? 0
-            : (int)Math.Ceiling(totalCount / (double)normalizedPageSize);
+            : (int)Math.Ceiling(totalCount / (double)page.NormalizedPageSize);
 
-        var items = source
-            .Skip((normalizedPage - 1) * normalizedPageSize)
-            .Take(normalizedPageSize)
-            .ToList();
-
-        return new PagedResult<T>
-        {
-            Items = items,
-            Page = normalizedPage,
-            PageSize = normalizedPageSize,
-            TotalCount = totalCount,
-            TotalPages = totalPages
-        };
+        return new PagedResult<T>(items, page.NormalizedPage, page.NormalizedPageSize, totalCount, totalPages);
     }
+
+    public PagedResult<TOut> Map<TOut>(IReadOnlyList<TOut> mappedItems) =>
+        new(mappedItems, Page, PageSize, TotalCount, TotalPages);
 }

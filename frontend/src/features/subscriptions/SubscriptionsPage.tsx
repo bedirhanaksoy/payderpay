@@ -9,6 +9,8 @@ import type { CreateSubscriptionRequest, SubscriptionResponse, SubscriptionStatu
 import { parseProblemDetails } from '../../shared/errors/problem-details'
 import { Field, Input, Select } from '../../components/Field'
 import { ConfirmModal, Modal } from '../../components/Modal'
+import Pagination from '../../components/Pagination'
+import SpinnerLabel from '../../components/SpinnerLabel'
 import { subscriptionStatusLabel, subscriptionTypeLabel } from '../../shared/format/enums'
 import { formatDateOnly } from '../../shared/format/dateTime'
 
@@ -76,7 +78,7 @@ function SubscriptionForm({ defaultValues, isEdit, isPending, error, onSubmit }:
 
       <div className="form-actions">
         <button className="btn btn-primary" type="submit" disabled={isPending}>
-          {isPending ? <span className="spin">◌</span> : isEdit ? 'Save changes' : 'Create subscription'}
+          <SpinnerLabel loading={isPending}>{isEdit ? 'Save changes' : 'Create subscription'}</SpinnerLabel>
         </button>
       </div>
     </form>
@@ -90,10 +92,13 @@ export default function SubscriptionsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing] = useState<SubscriptionResponse | null>(null)
   const [deleting, setDeleting] = useState<SubscriptionResponse | null>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = 20
 
   const subscriptionsQuery = useQuery({
-    queryKey: ['subscriptions', user.customerId],
-    queryFn: () => subscriptionsApi.listByCustomer(user.customerId),
+    queryKey: ['subscriptions', user.customerId, page, pageSize],
+    queryFn: () => subscriptionsApi.listByCustomer(user.customerId, page, pageSize),
+    placeholderData: previous => previous,
   })
 
   const createMutation = useMutation({
@@ -120,7 +125,7 @@ export default function SubscriptionsPage() {
     },
   })
 
-  const items = subscriptionsQuery.data ?? []
+  const items = subscriptionsQuery.data?.items ?? []
 
   const sorted = useMemo(
     () => [...items].sort((a, b) => Number(a.status) - Number(b.status)),
@@ -150,6 +155,7 @@ export default function SubscriptionsPage() {
           <div className="empty-state-text">No subscriptions yet. Create one to continue.</div>
         </div>
       ) : (
+        <>
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -185,6 +191,14 @@ export default function SubscriptionsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={subscriptionsQuery.data?.page ?? page}
+          totalPages={subscriptionsQuery.data?.totalPages ?? 0}
+          totalCount={subscriptionsQuery.data?.totalCount}
+          isFetching={subscriptionsQuery.isFetching}
+          onPageChange={setPage}
+        />
+        </>
       )}
 
       {showCreate && (

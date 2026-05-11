@@ -8,6 +8,6 @@ public interface ICustomerService
     Task<CustomerResponse> CreateAsync(CreateCustomerRequest request, CancellationToken cancellationToken = default);
     Task<CustomerResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CustomerResponse>> GetAllAsync(CancellationToken cancellationToken = default);
-    Task<PagedResult<CustomerResponse>> GetAllPagedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<PagedResult<CustomerResponse>> GetAllPagedAsync(PageRequest page, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

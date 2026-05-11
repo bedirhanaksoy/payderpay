@@ -20,6 +20,13 @@ export const subscriptionsApi = {
     return toPaginatedResult(response, page, pageSize)
   },
 
+  listAllByCustomer: async (customerId: string): Promise<SubscriptionResponse[]> => {
+    const response = await apiClient.get<SubscriptionResponse[]>(
+      `/api/subscriptions/all?customerId=${customerId}`,
+    )
+    return response.data
+  },
+
   listActive: async (page = 1, pageSize = 20): Promise<PaginatedResult<SubscriptionResponse>> => {
     const response = await apiClient.get<SubscriptionResponse[]>(
       `/api/subscriptions/active?page=${page}&pageSize=${pageSize}`,

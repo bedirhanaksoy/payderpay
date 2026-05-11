@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { Field, Input } from '../../components/Field'
+import SpinnerLabel from '../../components/SpinnerLabel'
 import { authProvider } from '../../shared/auth/provider'
 import { session } from '../../shared/auth/session'
 import { errorMessage } from '../../shared/errors/problem-details'
@@ -74,7 +75,7 @@ export default function RegisterPage() {
             style={{ justifyContent: 'center', marginTop: '0.5rem' }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? <span className="spin">◌</span> : 'Create account'}
+            <SpinnerLabel loading={isSubmitting}>Create account</SpinnerLabel>
           </button>
         </form>
 
