@@ -86,7 +86,7 @@ export default function PaymentsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Subscription Id</th>
+                <th>Subscriber No</th>
                 <th>Period</th>
                 <th>Amount</th>
                 <th>Payment Date</th>
@@ -96,7 +96,9 @@ export default function PaymentsPage() {
             <tbody>
               {filtered.map(item => (
                 <tr key={item.id}>
-                  <td className="muted" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{item.subscriptionId}</td>
+                  <td className="muted" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                    {item.subscriberNumber || '-'}
+                  </td>
                   <td>{item.periodYear}/{String(item.periodMonth).padStart(2, '0')}</td>
                   <td className="amount">{formatCurrency(item.amount)}</td>
                   <td>{formatDateTime(item.paymentDateUtc)}</td>

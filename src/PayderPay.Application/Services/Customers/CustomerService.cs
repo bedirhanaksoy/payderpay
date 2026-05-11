@@ -1,5 +1,6 @@
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.Customers;
 using PayderPay.Application.Common.Exceptions;
 using PayderPay.Domain.Entities;
@@ -73,6 +74,12 @@ public class CustomerService : ICustomerService
     {
         var customers = await _customerRepository.GetAllAsync(cancellationToken);
         return customers.Select(ToResponse).ToList();
+    }
+
+    public async Task<PagedResult<CustomerResponse>> GetAllPagedAsync(int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var items = await GetAllAsync(cancellationToken);
+        return PaginationHelper.ToPaged(items, page, pageSize);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)

@@ -10,6 +10,7 @@ import { parseProblemDetails } from '../../shared/errors/problem-details'
 import { Field, Input, Select } from '../../components/Field'
 import { ConfirmModal, Modal } from '../../components/Modal'
 import { subscriptionStatusLabel, subscriptionTypeLabel } from '../../shared/format/enums'
+import { formatDateOnly } from '../../shared/format/dateTime'
 
 const subscriptionTypes: SubscriptionType[] = [1, 2, 3, 4, 5, 6]
 const subscriptionStatuses: SubscriptionStatus[] = [1, 2]
@@ -18,7 +19,6 @@ const schema = z.object({
   subscriptionType: z.number().int().min(1).max(6),
   providerName: z.string().min(1).max(200),
   subscriberNumber: z.string().min(1).max(100),
-  dueDayOfMonth: z.number().int().min(1).max(31),
   status: z.number().int().min(1).max(2).optional(),
 })
 
@@ -62,10 +62,6 @@ function SubscriptionForm({ defaultValues, isEdit, isPending, error, onSubmit }:
 
       <Field label="Subscriber number" error={errors.subscriberNumber?.message}>
         <Input placeholder="SUB-0001" error={!!errors.subscriberNumber} {...register('subscriberNumber')} />
-      </Field>
-
-      <Field label="Due day of month" error={errors.dueDayOfMonth?.message}>
-        <Input type="number" min="1" max="31" error={!!errors.dueDayOfMonth} {...register('dueDayOfMonth', { valueAsNumber: true })} />
       </Field>
 
       {isEdit && (
@@ -161,7 +157,7 @@ export default function SubscriptionsPage() {
                 <th>Type</th>
                 <th>Provider</th>
                 <th>Subscriber No</th>
-                <th>Due Day</th>
+                <th>Due Date</th>
                 <th>Status</th>
                 <th className="right">Actions</th>
               </tr>
@@ -172,7 +168,7 @@ export default function SubscriptionsPage() {
                   <td>{subscriptionTypeLabel(item.subscriptionType)}</td>
                   <td>{item.providerName}</td>
                   <td>{item.subscriberNumber}</td>
-                  <td>{item.dueDayOfMonth}</td>
+                  <td>{item.currentDueDate ? formatDateOnly(item.currentDueDate) : '-'}</td>
                   <td>
                     <span className={`badge ${item.status === 1 ? 'badge-success' : 'badge-neutral'}`}>
                       {subscriptionStatusLabel(item.status)}
@@ -194,7 +190,7 @@ export default function SubscriptionsPage() {
       {showCreate && (
         <Modal title="Create subscription" onClose={() => { setShowCreate(false); createMutation.reset() }}>
           <SubscriptionForm
-            defaultValues={{ subscriptionType: 1, dueDayOfMonth: 1 }}
+            defaultValues={{ subscriptionType: 1 }}
             isPending={createMutation.isPending}
             error={createMutation.error}
             onSubmit={values => {
@@ -203,7 +199,6 @@ export default function SubscriptionsPage() {
                 subscriptionType: values.subscriptionType as SubscriptionType,
                 providerName: values.providerName,
                 subscriberNumber: values.subscriberNumber,
-                dueDayOfMonth: values.dueDayOfMonth,
               })
             }}
           />
@@ -218,7 +213,6 @@ export default function SubscriptionsPage() {
               subscriptionType: editing.subscriptionType,
               providerName: editing.providerName,
               subscriberNumber: editing.subscriberNumber,
-              dueDayOfMonth: editing.dueDayOfMonth,
               status: editing.status,
             }}
             isPending={updateMutation.isPending}
@@ -230,7 +224,6 @@ export default function SubscriptionsPage() {
                   subscriptionType: values.subscriptionType as SubscriptionType,
                   providerName: values.providerName,
                   subscriberNumber: values.subscriberNumber,
-                  dueDayOfMonth: values.dueDayOfMonth,
                   status: (values.status ?? 1) as SubscriptionStatus,
                 },
               })

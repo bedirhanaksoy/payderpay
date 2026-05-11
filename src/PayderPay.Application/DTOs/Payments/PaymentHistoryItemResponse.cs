@@ -7,6 +7,7 @@ public class PaymentHistoryItemResponse
     public Guid Id { get; set; }
     public Guid DebtId { get; set; }
     public Guid SubscriptionId { get; set; }
+    public string SubscriberNumber { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public DateTime PaymentDateUtc { get; set; }
     public int PeriodYear { get; set; }

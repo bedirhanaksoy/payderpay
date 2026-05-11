@@ -139,14 +139,14 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
             CustomerId = customerId,
             SubscriptionType = SubscriptionType.Electricity,
             ProviderName = "Provider A",
-            SubscriberNumber = $"SUB-{Guid.NewGuid():N}",
-            DueDayOfMonth = 20
+            SubscriberNumber = $"SUB-{Guid.NewGuid():N}"
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var subscription = await response.Content.ReadFromJsonAsync<SubscriptionResponse>();
         Assert.NotNull(subscription);
+        Assert.NotNull(subscription!.CurrentDueDate);
         return subscription!;
     }
 

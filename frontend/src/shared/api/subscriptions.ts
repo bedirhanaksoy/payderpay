@@ -1,8 +1,10 @@
 import { apiClient } from './client'
+import { toPaginatedResult } from './pagination'
 import type {
   CreateSubscriptionRequest,
   DebtQueryRequest,
   DebtQueryResponse,
+  PaginatedResult,
   PaymentHistoryItemResponse,
   PaymentResponse,
   SubscriptionResponse,
@@ -11,14 +13,18 @@ import type {
 } from '../types'
 
 export const subscriptionsApi = {
-  listByCustomer: async (customerId: string) => {
-    const response = await apiClient.get<SubscriptionResponse[]>(`/api/subscriptions?customerId=${customerId}`)
-    return response.data
+  listByCustomer: async (customerId: string, page = 1, pageSize = 20): Promise<PaginatedResult<SubscriptionResponse>> => {
+    const response = await apiClient.get<SubscriptionResponse[]>(
+      `/api/subscriptions?customerId=${customerId}&page=${page}&pageSize=${pageSize}`,
+    )
+    return toPaginatedResult(response, page, pageSize)
   },
 
-  listActive: async () => {
-    const response = await apiClient.get<SubscriptionResponse[]>('/api/subscriptions/active')
-    return response.data
+  listActive: async (page = 1, pageSize = 20): Promise<PaginatedResult<SubscriptionResponse>> => {
+    const response = await apiClient.get<SubscriptionResponse[]>(
+      `/api/subscriptions/active?page=${page}&pageSize=${pageSize}`,
+    )
+    return toPaginatedResult(response, page, pageSize)
   },
 
   create: async (payload: CreateSubscriptionRequest) => {
@@ -64,10 +70,14 @@ export const subscriptionsApi = {
     return response.data
   },
 
-  getPaymentHistory: async (subscriptionId: string) => {
+  getPaymentHistory: async (
+    subscriptionId: string,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedResult<PaymentHistoryItemResponse>> => {
     const response = await apiClient.get<PaymentHistoryItemResponse[]>(
-      `/api/subscriptions/${subscriptionId}/payments`,
+      `/api/subscriptions/${subscriptionId}/payments?page=${page}&pageSize=${pageSize}`,
     )
-    return response.data
+    return toPaginatedResult(response, page, pageSize)
   },
 }

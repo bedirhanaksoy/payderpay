@@ -18,7 +18,4 @@ public class UpdateSubscriptionRequest
 
     [Required]
     public SubscriptionStatus Status { get; set; }
-
-    [Range(1, 31)]
-    public int DueDayOfMonth { get; set; }
 }

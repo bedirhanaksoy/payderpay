@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PayderPay.Api.Extensions;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Payments;
 
@@ -28,9 +29,14 @@ public class SubscriptionPaymentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<PaymentHistoryItemResponse>>> GetBySubscription(Guid subscriptionId, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<PaymentHistoryItemResponse>>> GetBySubscription(
+        Guid subscriptionId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _paymentService.GetBySubscriptionAsync(subscriptionId, cancellationToken);
-        return Ok(result);
+        var result = await _paymentService.GetBySubscriptionPagedAsync(subscriptionId, page, pageSize, cancellationToken);
+        Response.AddPaginationHeaders(result);
+        return Ok(result.Items);
     }
 }

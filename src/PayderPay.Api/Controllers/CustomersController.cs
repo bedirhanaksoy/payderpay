@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PayderPay.Api.Extensions;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Customers;
 
@@ -34,10 +35,14 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<CustomerResponse>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<CustomerResponse>>> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _customerService.GetAllAsync(cancellationToken);
-        return Ok(result);
+        var result = await _customerService.GetAllPagedAsync(page, pageSize, cancellationToken);
+        Response.AddPaginationHeaders(result);
+        return Ok(result.Items);
     }
 
     [HttpDelete("{id:guid}")]

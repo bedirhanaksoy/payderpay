@@ -24,11 +24,6 @@ public class CreateSubscriptionRequestValidator : RequestValidator<CreateSubscri
             errors[nameof(request.SubscriberNumber)] = ["Subscriber number is required."];
         }
 
-        if (request.DueDayOfMonth is < 1 or > 31)
-        {
-            errors[nameof(request.DueDayOfMonth)] = ["Due day of month must be between 1 and 31."];
-        }
-
         return errors;
     }
 }

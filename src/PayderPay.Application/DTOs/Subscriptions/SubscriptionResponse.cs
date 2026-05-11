@@ -11,6 +11,7 @@ public class SubscriptionResponse
     public string SubscriberNumber { get; set; } = string.Empty;
     public SubscriptionStatus Status { get; set; }
     public int DueDayOfMonth { get; set; }
+    public DateOnly? CurrentDueDate { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 }

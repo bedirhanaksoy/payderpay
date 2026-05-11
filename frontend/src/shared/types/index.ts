@@ -2,6 +2,17 @@ export type SubscriptionType = 1 | 2 | 3 | 4 | 5 | 6
 export type SubscriptionStatus = 1 | 2
 export type PaymentStatus = 1 | 2
 
+export interface PaginationMeta {
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+}
+
+export interface PaginatedResult<T> extends PaginationMeta {
+  items: T[]
+}
+
 export interface CustomerResponse {
   id: string
   fullName: string
@@ -35,6 +46,7 @@ export interface SubscriptionResponse {
   subscriberNumber: string
   status: SubscriptionStatus
   dueDayOfMonth: number
+  currentDueDate?: string | null
   createdAtUtc: string
   updatedAtUtc: string
 }
@@ -44,7 +56,6 @@ export interface CreateSubscriptionRequest {
   subscriptionType: SubscriptionType
   providerName: string
   subscriberNumber: string
-  dueDayOfMonth: number
 }
 
 export interface UpdateSubscriptionRequest {
@@ -52,7 +63,6 @@ export interface UpdateSubscriptionRequest {
   providerName: string
   subscriberNumber: string
   status: SubscriptionStatus
-  dueDayOfMonth: number
 }
 
 export interface DebtQueryRequest {}
@@ -97,6 +107,7 @@ export interface PaymentHistoryItemResponse {
   id: string
   debtId: string
   subscriptionId: string
+  subscriberNumber: string
   amount: number
   paymentDateUtc: string
   periodYear: number

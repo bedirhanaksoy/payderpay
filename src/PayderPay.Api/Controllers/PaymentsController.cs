@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PayderPay.Api.Extensions;
 using PayderPay.Application.Services;
 using PayderPay.Application.Dtos.Payments;
 
@@ -18,14 +19,19 @@ public class PaymentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<PaymentHistoryItemResponse>>> GetByCustomer([FromQuery] Guid? customerId, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<PaymentHistoryItemResponse>>> GetByCustomer(
+        [FromQuery] Guid? customerId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         if (!customerId.HasValue)
         {
             return BadRequest(new { Message = "Query parameter 'customerId' is required." });
         }
 
-        var result = await _paymentService.GetByCustomerAsync(customerId.Value, cancellationToken);
-        return Ok(result);
+        var result = await _paymentService.GetByCustomerPagedAsync(customerId.Value, page, pageSize, cancellationToken);
+        Response.AddPaginationHeaders(result);
+        return Ok(result.Items);
     }
 }

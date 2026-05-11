@@ -1,3 +1,4 @@
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.Subscriptions;
 
 namespace PayderPay.Application.Services;
@@ -9,4 +10,6 @@ public interface ISubscriptionService
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionResponse>> GetByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionResponse>> GetActiveAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<SubscriptionResponse>> GetByCustomerPagedAsync(Guid customerId, int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<PagedResult<SubscriptionResponse>> GetActivePagedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
 }

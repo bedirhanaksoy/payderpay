@@ -18,7 +18,4 @@ public class CreateSubscriptionRequest
     [Required]
     [MaxLength(100)]
     public string SubscriberNumber { get; set; } = string.Empty;
-
-    [Range(1, 31)]
-    public int DueDayOfMonth { get; set; }
 }

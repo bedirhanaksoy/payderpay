@@ -5,10 +5,12 @@ import { subscriptionsApi } from '../../shared/api/subscriptions'
 import { customersApi } from '../../shared/api/customers'
 import { getCurrentUserOrThrow } from '../../shared/auth/use-current-user'
 import { Field, Select } from '../../components/Field'
+import { Modal } from '../../components/Modal'
 import { formatCurrency } from '../../shared/format/amount'
 import { formatDateOnly, formatDateTime } from '../../shared/format/dateTime'
 import { paymentStatusLabel, subscriptionTypeLabel } from '../../shared/format/enums'
 import { parseProblemDetails } from '../../shared/errors/problem-details'
+import type { DebtItemResponse } from '../../shared/types'
 
 export default function BillingPage() {
   const queryClient = useQueryClient()
@@ -52,8 +54,10 @@ export default function BillingPage() {
   })
 
   const [queryError, setQueryError] = useState<string | null>(null)
+  const [querySuccess, setQuerySuccess] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null)
+  const [confirmDebt, setConfirmDebt] = useState<DebtItemResponse | null>(null)
 
   const queryDebtMutation = useMutation({
     mutationFn: () => {
@@ -63,11 +67,13 @@ export default function BillingPage() {
 
       return subscriptionsApi.queryDebt(subscriptionId)
     },
-    onSuccess: () => {
+    onSuccess: response => {
       setQueryError(null)
+      setQuerySuccess(response.debts.length === 0 ? 'No unpaid debt found for selected subscription.' : 'Debt list updated.')
       queryClient.invalidateQueries({ queryKey: ['debt-history', subscriptionId] })
     },
     onError: error => {
+      setQuerySuccess(null)
       const parsed = parseProblemDetails(error, 'debt_query')
       setQueryError(parsed.userMessage)
     },
@@ -81,6 +87,7 @@ export default function BillingPage() {
       return subscriptionsApi.createPayment(subscriptionId, debtId)
     },
     onSuccess: response => {
+      setConfirmDebt(null)
       setPaymentError(null)
       setPaymentSuccess(
         response.status === 1
@@ -91,8 +98,10 @@ export default function BillingPage() {
       queryClient.invalidateQueries({ queryKey: ['subscription-payments', subscriptionId] })
       queryClient.invalidateQueries({ queryKey: ['main-account', user.customerId] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-unpaid-debts', user.customerId] })
     },
     onError: error => {
+      setConfirmDebt(null)
       const parsed = parseProblemDetails(error, 'payment')
       setPaymentSuccess(null)
       setPaymentError(parsed.userMessage)
@@ -151,6 +160,11 @@ export default function BillingPage() {
                 onChange={event => {
                   const nextValue = event.target.value
                   setSubscriptionId(nextValue)
+                  setQuerySuccess(null)
+                  setQueryError(null)
+                  setPaymentError(null)
+                  setPaymentSuccess(null)
+                  setConfirmDebt(null)
                   if (nextValue) {
                     setSearchParams({ subscriptionId: nextValue })
                   }
@@ -171,8 +185,8 @@ export default function BillingPage() {
               </button>
             </div>
 
-            <div className="field-hint">Debt query is performed directly by subscription number.</div>
             {queryError && <div className="alert alert-error">{queryError}</div>}
+            {querySuccess && <div className="alert alert-success">{querySuccess}</div>}
             {paymentError && <div className="alert alert-error">{paymentError}</div>}
             {paymentSuccess && <div className="alert alert-success">{paymentSuccess}</div>}
           </div>
@@ -219,7 +233,7 @@ export default function BillingPage() {
                       <td className="right">
                         <button
                           className="btn btn-accent btn-sm"
-                          onClick={() => payMutation.mutate(debt.debtId)}
+                          onClick={() => setConfirmDebt(debt)}
                           disabled={payMutation.isPending}
                         >
                           {payMutation.isPending ? <span className="spin">◌</span> : 'Pay'}
@@ -276,6 +290,56 @@ export default function BillingPage() {
           )}
         </div>
       </div>
+
+      {confirmDebt && (
+        <Modal
+          title="Confirm Payment"
+          onClose={() => {
+            if (!payMutation.isPending) {
+              setConfirmDebt(null)
+            }
+          }}
+          footer={(
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setConfirmDebt(null)}
+                disabled={payMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => payMutation.mutate(confirmDebt.debtId)}
+                disabled={payMutation.isPending}
+              >
+                {payMutation.isPending ? <span className="spin">◌</span> : 'Confirm payment'}
+              </button>
+            </>
+          )}
+        >
+          <div className="summary-kv-grid">
+            <div>
+              <div className="section-title">Amount</div>
+              <div className="summary-kv-value amount">{formatCurrency(confirmDebt.amount)}</div>
+            </div>
+            <div>
+              <div className="section-title">Due Date</div>
+              <div className="summary-kv-value">{formatDateOnly(confirmDebt.dueDate)}</div>
+            </div>
+            <div>
+              <div className="section-title">Provider</div>
+              <div className="summary-kv-value">{confirmDebt.providerName}</div>
+            </div>
+            <div>
+              <div className="section-title">Subscriber No</div>
+              <div className="summary-kv-value">{confirmDebt.subscriberNumber}</div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }

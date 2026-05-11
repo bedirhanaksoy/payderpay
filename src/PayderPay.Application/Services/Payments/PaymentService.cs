@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.External;
+using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.External;
 using PayderPay.Application.Dtos.Payments;
 using PayderPay.Application.Common.Exceptions;
@@ -227,23 +228,46 @@ public class PaymentService : IPaymentService
         var payments = await _paymentRepository.GetBySubscriptionAsync(subscriptionId, cancellationToken);
 
         return payments
-            .Select(ToHistoryItem)
+            .Select(x => ToHistoryItem(x, subscription.SubscriberNumber))
             .ToList();
     }
 
     public async Task<IReadOnlyList<PaymentHistoryItemResponse>> GetByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
     {
         var payments = await _paymentRepository.GetByCustomerAsync(customerId, cancellationToken);
-        return payments.Select(ToHistoryItem).ToList();
+        return payments
+            .Select(x => ToHistoryItem(x, x.Subscription.SubscriberNumber))
+            .ToList();
     }
 
-    private static PaymentHistoryItemResponse ToHistoryItem(Payment payment)
+    public async Task<PagedResult<PaymentHistoryItemResponse>> GetBySubscriptionPagedAsync(
+        Guid subscriptionId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await GetBySubscriptionAsync(subscriptionId, cancellationToken);
+        return PaginationHelper.ToPaged(items, page, pageSize);
+    }
+
+    public async Task<PagedResult<PaymentHistoryItemResponse>> GetByCustomerPagedAsync(
+        Guid customerId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await GetByCustomerAsync(customerId, cancellationToken);
+        return PaginationHelper.ToPaged(items, page, pageSize);
+    }
+
+    private static PaymentHistoryItemResponse ToHistoryItem(Payment payment, string subscriberNumber)
     {
         return new PaymentHistoryItemResponse
         {
             Id = payment.Id,
             DebtId = payment.DebtId,
             SubscriptionId = payment.SubscriptionId,
+            SubscriberNumber = subscriberNumber,
             Amount = payment.Amount,
             PaymentDateUtc = payment.PaymentDateUtc,
             PeriodYear = payment.PeriodYear,
