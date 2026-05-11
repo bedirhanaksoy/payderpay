@@ -1,5 +1,8 @@
+using PayderPay.Api.Configuration;
 using PayderPay.Api.Middleware;
 using PayderPay.Infrastructure.DependencyInjection;
+
+DotEnvLoader.LoadFromRepositoryRoot();
 
 var builder = WebApplication.CreateBuilder(args);
 

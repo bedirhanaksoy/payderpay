@@ -15,7 +15,7 @@ public class PaymentGatewayClient : IPaymentGatewayClient
 
     public async Task<PaymentGatewayResponse> ProcessPaymentAsync(PaymentGatewayRequest request, CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.PostAsJsonAsync("/api/mock/payment/process", request, cancellationToken);
+        using var response = await _httpClient.PostAsJsonAsync("/api/payment/process", request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PaymentGatewayResponse>(cancellationToken: cancellationToken);
