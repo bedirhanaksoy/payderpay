@@ -45,6 +45,11 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .HasForeignKey(x => x.CustomerId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(x => x.MainAccount)
+            .WithOne(x => x.Customer)
+            .HasForeignKey<MainAccount>(x => x.CustomerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasQueryFilter(x => !x.IsDeleted);
     }
 }

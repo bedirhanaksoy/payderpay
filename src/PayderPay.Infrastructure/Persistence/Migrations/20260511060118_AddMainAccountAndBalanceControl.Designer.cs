@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PayderPay.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PayderPay.Infrastructure.Persistence;
 namespace PayderPay.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PayderPayDbContext))]
-    partial class PayderPayDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260511060118_AddMainAccountAndBalanceControl")]
+    partial class AddMainAccountAndBalanceControl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

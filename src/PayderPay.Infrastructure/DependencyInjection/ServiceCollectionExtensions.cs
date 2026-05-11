@@ -38,13 +38,16 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<ICustomerRepository, CustomerRepository>();
+        services.AddScoped<IMainAccountRepository, MainAccountRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IDebtQueryResultRepository, DebtQueryResultRepository>();
         services.AddScoped<INotificationLogRepository, NotificationLogRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        services.AddScoped<IIbanGenerator, IbanGenerator>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IMainAccountService, MainAccountService>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
         services.AddScoped<IDebtQueryService, DebtQueryService>();
         services.AddScoped<IPaymentService, PaymentService>();

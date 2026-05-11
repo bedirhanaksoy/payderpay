@@ -14,59 +14,105 @@ public class PaymentServiceTests
     [Fact]
     public async Task CreateAsync_ShouldThrowConflict_WhenSuccessfulPaymentAlreadyExists()
     {
-        var service = BuildService(hasSuccessfulPayment: true, gatewaySuccess: true, debtBelongsToSubscription: true);
+        var gateway = new FakePaymentGatewayClient(success: true);
+        var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: true);
+        var mainAccountRepository = new InMemoryMainAccountRepository(1000m);
 
-        var exception = await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(
+        var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtBelongsToSubscription: true);
+
+        await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(
             TestData.SubscriptionId,
             new CreatePaymentRequest { DebtQueryResultId = TestData.DebtQueryResultId }));
 
-        Assert.Contains("already exists", exception.Message);
+        Assert.Equal(0, gateway.CallCount);
+        Assert.Empty(paymentRepository.AddedPayments);
     }
 
     [Fact]
     public async Task CreateAsync_ShouldThrowBadRequest_WhenDebtDoesNotBelongToSubscription()
     {
-        var service = BuildService(hasSuccessfulPayment: false, gatewaySuccess: true, debtBelongsToSubscription: false);
+        var gateway = new FakePaymentGatewayClient(success: true);
+        var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
+        var mainAccountRepository = new InMemoryMainAccountRepository(1000m);
 
-        var exception = await Assert.ThrowsAsync<BadRequestException>(() => service.CreateAsync(
+        var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtBelongsToSubscription: false);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateAsync(
             TestData.SubscriptionId,
             new CreatePaymentRequest { DebtQueryResultId = TestData.DebtQueryResultId }));
 
-        Assert.Contains("does not belong", exception.Message);
+        Assert.Equal(0, gateway.CallCount);
+        Assert.Empty(paymentRepository.AddedPayments);
     }
 
     [Fact]
-    public async Task CreateAsync_ShouldCreateFailedPayment_WhenGatewayFails()
+    public async Task CreateAsync_ShouldThrowConflict_WhenInsufficientBalance()
     {
+        var gateway = new FakePaymentGatewayClient(success: true);
         var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
-        var service = BuildService(
-            paymentRepository: paymentRepository,
-            hasSuccessfulPayment: false,
-            gatewaySuccess: false,
-            debtBelongsToSubscription: true);
+        var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 100m);
+
+        var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtBelongsToSubscription: true);
+
+        await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(
+            TestData.SubscriptionId,
+            new CreatePaymentRequest { DebtQueryResultId = TestData.DebtQueryResultId }));
+
+        Assert.Equal(0, gateway.CallCount);
+        Assert.Empty(paymentRepository.AddedPayments);
+        Assert.Equal(100m, mainAccountRepository.MainAccount.Balance);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ShouldDeductBalance_WhenGatewaySuccessful()
+    {
+        var gateway = new FakePaymentGatewayClient(success: true);
+        var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
+        var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 500m);
+
+        var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtBelongsToSubscription: true);
+
+        var result = await service.CreateAsync(
+            TestData.SubscriptionId,
+            new CreatePaymentRequest { DebtQueryResultId = TestData.DebtQueryResultId });
+
+        Assert.Equal(PaymentStatus.Successful, result.Status);
+        Assert.Equal(1, gateway.CallCount);
+        Assert.Single(paymentRepository.AddedPayments);
+        Assert.Equal(250m, mainAccountRepository.MainAccount.Balance);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ShouldKeepBalance_WhenGatewayFails()
+    {
+        var gateway = new FakePaymentGatewayClient(success: false);
+        var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
+        var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 500m);
+
+        var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtBelongsToSubscription: true);
 
         var result = await service.CreateAsync(
             TestData.SubscriptionId,
             new CreatePaymentRequest { DebtQueryResultId = TestData.DebtQueryResultId });
 
         Assert.Equal(PaymentStatus.Failed, result.Status);
+        Assert.Equal(1, gateway.CallCount);
         Assert.Single(paymentRepository.AddedPayments);
-        Assert.Equal(PaymentStatus.Failed, paymentRepository.AddedPayments[0].Status);
+        Assert.Equal(500m, mainAccountRepository.MainAccount.Balance);
     }
 
     private static PaymentService BuildService(
-        bool hasSuccessfulPayment,
-        bool gatewaySuccess,
-        bool debtBelongsToSubscription,
-        InMemoryPaymentRepository? paymentRepository = null)
+        InMemoryPaymentRepository paymentRepository,
+        InMemoryMainAccountRepository mainAccountRepository,
+        FakePaymentGatewayClient gateway,
+        bool debtBelongsToSubscription)
     {
-        paymentRepository ??= new InMemoryPaymentRepository(hasSuccessfulPayment);
-
         return new PaymentService(
             new InMemorySubscriptionRepository(),
             new InMemoryDebtQueryResultRepository(debtBelongsToSubscription),
+            mainAccountRepository,
             paymentRepository,
-            new FakePaymentGatewayClient(gatewaySuccess),
+            gateway,
             new FakeUnitOfWork());
     }
 
@@ -75,6 +121,7 @@ public class PaymentServiceTests
         public static readonly Guid SubscriptionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         public static readonly Guid AnotherSubscriptionId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         public static readonly Guid DebtQueryResultId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        public static readonly Guid CustomerId = Guid.Parse("44444444-4444-4444-4444-444444444444");
     }
 
     private sealed class InMemorySubscriptionRepository : ISubscriptionRepository
@@ -89,7 +136,7 @@ public class PaymentServiceTests
             return Task.FromResult<Subscription?>(new Subscription
             {
                 Id = TestData.SubscriptionId,
-                CustomerId = Guid.NewGuid(),
+                CustomerId = TestData.CustomerId,
                 SubscriptionType = SubscriptionType.Electricity,
                 ProviderName = "Provider",
                 SubscriberNumber = "SUB-1",
@@ -155,6 +202,37 @@ public class PaymentServiceTests
             Task.FromResult<IReadOnlyList<DebtQueryResult>>(Array.Empty<DebtQueryResult>());
     }
 
+    private sealed class InMemoryMainAccountRepository : IMainAccountRepository
+    {
+        public InMemoryMainAccountRepository(decimal initialBalance)
+        {
+            MainAccount = new MainAccount
+            {
+                CustomerId = TestData.CustomerId,
+                Iban = "TR000000000000000000000001",
+                Balance = initialBalance
+            };
+        }
+
+        public MainAccount MainAccount { get; }
+
+        public Task<MainAccount?> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(customerId == TestData.CustomerId ? MainAccount : null);
+        }
+
+        public Task<bool> ExistsByIbanAsync(string iban, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(MainAccount.Iban == iban);
+        }
+
+        public Task AddAsync(MainAccount mainAccount, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public void Update(MainAccount mainAccount)
+        {
+        }
+    }
+
     private sealed class InMemoryPaymentRepository : IPaymentRepository
     {
         private readonly bool _hasSuccessfulPayment;
@@ -194,8 +272,12 @@ public class PaymentServiceTests
             _success = success;
         }
 
+        public int CallCount { get; private set; }
+
         public Task<PaymentGatewayResponse> ProcessPaymentAsync(PaymentGatewayRequest request, CancellationToken cancellationToken = default)
         {
+            CallCount++;
+
             var response = new PaymentGatewayResponse
             {
                 IsSuccessful = _success,

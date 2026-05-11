@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using PayderPay.Application.DTOs.Customers;
 using PayderPay.Application.DTOs.Debts;
+using PayderPay.Application.DTOs.MainAccounts;
 using PayderPay.Application.DTOs.Payments;
 using PayderPay.Application.DTOs.Subscriptions;
 using PayderPay.Application.DTOs.Summaries;
@@ -21,7 +22,7 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task CustomerSubscriptionDebtPaymentFlow_ShouldWork_WithSuccessAndFailureCases()
     {
-        var customer = await CreateCustomerAsync();
+        var customer = await CreateCustomerAsync(initialBalance: 1000m);
         var subscription = await CreateSubscriptionAsync(customer.Id);
 
         var debtForFailedPayment = await QueryDebtAsync(subscription.Id, 2026, 2);
@@ -65,9 +66,43 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
+    public async Task GetMainAccount_ShouldReturnUniqueIbanAndBalance()
+    {
+        var customer = await CreateCustomerAsync(initialBalance: 375m);
+
+        var account = await _client.GetFromJsonAsync<MainAccountResponse>(
+            $"/api/customers/{customer.Id}/main-account");
+
+        Assert.NotNull(account);
+        Assert.Equal(customer.Id, account!.CustomerId);
+        Assert.Equal(375m, account.Balance);
+        Assert.StartsWith("TR", account.Iban);
+    }
+
+    [Fact]
+    public async Task Payment_ShouldReturnConflict_WhenMainAccountBalanceInsufficient()
+    {
+        var customer = await CreateCustomerAsync(initialBalance: 50m);
+        var subscription = await CreateSubscriptionAsync(customer.Id);
+        var debt = await QueryDebtAsync(subscription.Id, 2026, 4);
+
+        var paymentResponse = await _client.PostAsJsonAsync(
+            $"/api/subscriptions/{subscription.Id}/payments",
+            new CreatePaymentRequest { DebtQueryResultId = debt.Id });
+
+        Assert.Equal(HttpStatusCode.Conflict, paymentResponse.StatusCode);
+
+        var paymentHistory = await _client.GetFromJsonAsync<List<PaymentHistoryItemResponse>>(
+            $"/api/subscriptions/{subscription.Id}/payments");
+
+        Assert.NotNull(paymentHistory);
+        Assert.Empty(paymentHistory!);
+    }
+
+    [Fact]
     public async Task SoftDeletedCustomer_ShouldNotAppearInCustomerList()
     {
-        var customer = await CreateCustomerAsync();
+        var customer = await CreateCustomerAsync(initialBalance: 100m);
 
         var deleteResponse = await _client.DeleteAsync($"/api/customers/{customer.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
@@ -77,13 +112,14 @@ public class ApiWorkflowTests : IClassFixture<CustomWebApplicationFactory>
         Assert.DoesNotContain(listResponse!, x => x.Id == customer.Id);
     }
 
-    private async Task<CustomerResponse> CreateCustomerAsync()
+    private async Task<CustomerResponse> CreateCustomerAsync(decimal initialBalance)
     {
         var response = await _client.PostAsJsonAsync("/api/customers", new CreateCustomerRequest
         {
             FullName = "Test User",
             Email = $"test-{Guid.NewGuid():N}@mail.com",
-            PhoneNumber = "5551112233"
+            PhoneNumber = "5551112233",
+            InitialMainAccountBalance = initialBalance
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

@@ -9,6 +9,7 @@ public class Customer : BaseEntity
     public string PhoneNumber { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
 
+    public MainAccount? MainAccount { get; set; }
     public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
     public ICollection<NotificationLog> NotificationLogs { get; set; } = new List<NotificationLog>();
 }

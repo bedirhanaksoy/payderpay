@@ -16,4 +16,7 @@ public class CreateCustomerRequest
     [Required]
     [MaxLength(30)]
     public string PhoneNumber { get; set; } = string.Empty;
+
+    [Range(typeof(decimal), "0", "9999999999")]
+    public decimal InitialMainAccountBalance { get; set; }
 }

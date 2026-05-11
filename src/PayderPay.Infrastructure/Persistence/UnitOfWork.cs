@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using PayderPay.Application.Abstractions.Repositories;
 
@@ -15,6 +16,11 @@ public class UnitOfWork : IUnitOfWork, IAsyncDisposable
 
     public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
     {
+        if (!_context.Database.IsRelational())
+        {
+            return;
+        }
+
         if (_currentTransaction is not null)
         {
             return;

@@ -1,5 +1,6 @@
 using PayderPay.Application.Abstractions.ApplicationServices;
 using PayderPay.Application.Abstractions.Repositories;
+using PayderPay.Application.Abstractions.Services;
 using PayderPay.Application.DTOs.Customers;
 using PayderPay.Application.Exceptions;
 using PayderPay.Domain.Entities;
@@ -9,16 +10,29 @@ namespace PayderPay.Application.Services;
 public class CustomerService : ICustomerService
 {
     private readonly ICustomerRepository _customerRepository;
+    private readonly IMainAccountRepository _mainAccountRepository;
+    private readonly IIbanGenerator _ibanGenerator;
     private readonly IUnitOfWork _unitOfWork;
 
-    public CustomerService(ICustomerRepository customerRepository, IUnitOfWork unitOfWork)
+    public CustomerService(
+        ICustomerRepository customerRepository,
+        IMainAccountRepository mainAccountRepository,
+        IIbanGenerator ibanGenerator,
+        IUnitOfWork unitOfWork)
     {
         _customerRepository = customerRepository;
+        _mainAccountRepository = mainAccountRepository;
+        _ibanGenerator = ibanGenerator;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<CustomerResponse> CreateAsync(CreateCustomerRequest request, CancellationToken cancellationToken = default)
     {
+        if (request.InitialMainAccountBalance < 0)
+        {
+            throw new BadRequestException("Initial main account balance cannot be negative.");
+        }
+
         var customer = new Customer
         {
             FullName = request.FullName.Trim(),
@@ -27,7 +41,16 @@ public class CustomerService : ICustomerService
             IsActive = true
         };
 
+        var iban = await _ibanGenerator.GenerateUniqueIbanAsync(cancellationToken);
+        var mainAccount = new MainAccount
+        {
+            CustomerId = customer.Id,
+            Iban = iban,
+            Balance = request.InitialMainAccountBalance
+        };
+
         await _customerRepository.AddAsync(customer, cancellationToken);
+        await _mainAccountRepository.AddAsync(mainAccount, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return ToResponse(customer);

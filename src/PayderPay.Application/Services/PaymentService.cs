@@ -13,6 +13,7 @@ public class PaymentService : IPaymentService
 {
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IDebtQueryResultRepository _debtQueryResultRepository;
+    private readonly IMainAccountRepository _mainAccountRepository;
     private readonly IPaymentRepository _paymentRepository;
     private readonly IPaymentGatewayClient _paymentGatewayClient;
     private readonly IUnitOfWork _unitOfWork;
@@ -20,12 +21,14 @@ public class PaymentService : IPaymentService
     public PaymentService(
         ISubscriptionRepository subscriptionRepository,
         IDebtQueryResultRepository debtQueryResultRepository,
+        IMainAccountRepository mainAccountRepository,
         IPaymentRepository paymentRepository,
         IPaymentGatewayClient paymentGatewayClient,
         IUnitOfWork unitOfWork)
     {
         _subscriptionRepository = subscriptionRepository;
         _debtQueryResultRepository = debtQueryResultRepository;
+        _mainAccountRepository = mainAccountRepository;
         _paymentRepository = paymentRepository;
         _paymentGatewayClient = paymentGatewayClient;
         _unitOfWork = unitOfWork;
@@ -60,6 +63,14 @@ public class PaymentService : IPaymentService
             throw new ConflictException("A successful payment already exists for this subscription and period.");
         }
 
+        var mainAccount = await _mainAccountRepository.GetByCustomerIdAsync(subscription.CustomerId, cancellationToken)
+            ?? throw new NotFoundException($"Main account for customer '{subscription.CustomerId}' was not found.");
+
+        if (mainAccount.Balance < debt.Amount)
+        {
+            throw new ConflictException("Insufficient balance in the main account.");
+        }
+
         var gatewayResponse = await _paymentGatewayClient.ProcessPaymentAsync(
             new PaymentGatewayRequest
             {
@@ -82,8 +93,25 @@ public class PaymentService : IPaymentService
             FailureReason = gatewayResponse.FailureReason
         };
 
-        await _paymentRepository.AddAsync(payment, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            if (gatewayResponse.IsSuccessful)
+            {
+                mainAccount.Balance -= debt.Amount;
+                _mainAccountRepository.Update(mainAccount);
+            }
+
+            await _paymentRepository.AddAsync(payment, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+        }
+        catch
+        {
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
+        }
 
         return new PaymentResponse
         {
