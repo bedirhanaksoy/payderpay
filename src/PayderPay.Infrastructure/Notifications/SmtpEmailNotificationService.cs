@@ -4,7 +4,6 @@ using System.Net.Mail;
 using System.Text.Encodings.Web;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using PayderPay.Application.Common.Helpers;
 using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Settings;
 using PayderPay.Domain.Enums;
@@ -32,19 +31,19 @@ public class SmtpEmailNotificationService : IEmailNotificationService
         CancellationToken cancellationToken = default)
     {
         var subject = $"PayderPay ödeme hatırlatma — {SubscriptionLabel(request.SubscriptionType)}";
-        var maskedName = HtmlEncoder.Default.Encode(SensitiveDataMasker.MaskName(request.CustomerName));
-        var maskedSubscriberNumber = HtmlEncoder.Default.Encode(SensitiveDataMasker.MaskSubscriberNumber(request.SubscriberNumber));
+        var customerName = HtmlEncoder.Default.Encode(request.CustomerName);
+        var subscriberNumber = HtmlEncoder.Default.Encode(request.SubscriberNumber);
         var providerName = HtmlEncoder.Default.Encode(request.ProviderName);
         var amount = HtmlEncoder.Default.Encode(FormatAmount(request.Amount));
         var dueDate = HtmlEncoder.Default.Encode(request.DueDate.ToString("dd.MM.yyyy", TurkishCulture));
         var period = HtmlEncoder.Default.Encode($"{request.PeriodYear}/{request.PeriodMonth:D2}");
 
         var body =
-            "<p>Sayın <strong>" + maskedName + "</strong>,</p>" +
+            "<p>Sayın <strong>" + customerName + "</strong>,</p>" +
             "<p>Yaklaşan bir aboneliğiniz için ödeme tarihi yaklaşıyor:</p>" +
             "<table style=\"border-collapse:collapse;\">" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">Hizmet</td><td style=\"padding:4px 12px;\">" + providerName + "</td></tr>" +
-            "<tr><td style=\"padding:4px 12px;color:#666;\">Abonelik No</td><td style=\"padding:4px 12px;\">" + maskedSubscriberNumber + "</td></tr>" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Abonelik No</td><td style=\"padding:4px 12px;\">" + subscriberNumber + "</td></tr>" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">Dönem</td><td style=\"padding:4px 12px;\">" + period + "</td></tr>" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">Son Ödeme Tarihi</td><td style=\"padding:4px 12px;\">" + dueDate + "</td></tr>" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">Tutar</td><td style=\"padding:4px 12px;font-weight:700;\">" + amount + "</td></tr>" +
@@ -61,8 +60,8 @@ public class SmtpEmailNotificationService : IEmailNotificationService
     {
         var statusLabel = request.Status == PaymentStatus.Successful ? "başarıyla tamamlandı" : "başarısız oldu";
         var subject = $"PayderPay ödeme makbuzu — {SubscriptionLabel(request.SubscriptionType)}";
-        var maskedName = HtmlEncoder.Default.Encode(SensitiveDataMasker.MaskName(request.CustomerName));
-        var maskedSubscriberNumber = HtmlEncoder.Default.Encode(SensitiveDataMasker.MaskSubscriberNumber(request.SubscriberNumber));
+        var customerName = HtmlEncoder.Default.Encode(request.CustomerName);
+        var subscriberNumber = HtmlEncoder.Default.Encode(request.SubscriberNumber);
         var providerName = HtmlEncoder.Default.Encode(request.ProviderName);
         var amount = HtmlEncoder.Default.Encode(FormatAmount(request.Amount));
         var paidAt = HtmlEncoder.Default.Encode(FormatAsTurkishTime(request.PaidAtUtc));
@@ -73,11 +72,11 @@ public class SmtpEmailNotificationService : IEmailNotificationService
             : string.Empty;
 
         var body =
-            "<p>Sayın <strong>" + maskedName + "</strong>,</p>" +
+            "<p>Sayın <strong>" + customerName + "</strong>,</p>" +
             "<p>Aboneliğiniz için ödemeniz <strong>" + statusLabel + "</strong>.</p>" +
             "<table style=\"border-collapse:collapse;\">" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">Hizmet</td><td style=\"padding:4px 12px;\">" + providerName + "</td></tr>" +
-            "<tr><td style=\"padding:4px 12px;color:#666;\">Abonelik No</td><td style=\"padding:4px 12px;\">" + maskedSubscriberNumber + "</td></tr>" +
+            "<tr><td style=\"padding:4px 12px;color:#666;\">Abonelik No</td><td style=\"padding:4px 12px;\">" + subscriberNumber + "</td></tr>" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">Dönem</td><td style=\"padding:4px 12px;\">" + period + "</td></tr>" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">İşlem Tarihi</td><td style=\"padding:4px 12px;\">" + paidAt + "</td></tr>" +
             "<tr><td style=\"padding:4px 12px;color:#666;\">İşlem No</td><td style=\"padding:4px 12px;\">" + transactionId + "</td></tr>" +

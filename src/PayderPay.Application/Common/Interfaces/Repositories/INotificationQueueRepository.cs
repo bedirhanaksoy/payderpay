@@ -10,5 +10,6 @@ public interface INotificationQueueRepository
     Task<IReadOnlyList<NotificationQueueItem>> GetPendingForDeliveryAsync(DateOnly today, int maxAttempts, CancellationToken cancellationToken = default);
     Task<bool> TryMarkSendingAsync(Guid id, CancellationToken cancellationToken = default);
     Task<NotificationQueueItem?> GetByIdWithRelationsAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<int> DeleteCompletedByTypeBeforeDateAsync(string notificationType, DateOnly beforeDate, CancellationToken cancellationToken = default);
     void Update(NotificationQueueItem queueItem);
 }

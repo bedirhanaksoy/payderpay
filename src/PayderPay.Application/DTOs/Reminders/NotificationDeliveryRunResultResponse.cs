@@ -8,5 +8,6 @@ public class NotificationDeliveryRunResultResponse
     public int PendingForRetryCount { get; set; }
     public int MaxRetryReachedCount { get; set; }
     public int SkippedClosedOrPaidCount { get; set; }
+    public int CleanedQueueItemCount { get; set; }
     public int ErrorCount { get; set; }
 }

@@ -5,16 +5,14 @@ namespace PayderPay.Application.Common.Interfaces.Notifications;
 public interface IEmailNotificationService
 {
     /// <summary>
-    /// Sends a "your invoice due date is approaching" reminder. Customer name and subscriber
-    /// number are masked in the email body; amount is shown openly.
+    /// Sends a "your invoice due date is approaching" reminder.
     /// </summary>
     Task<EmailDispatchResult> SendUpcomingPaymentReminderAsync(
         UpcomingPaymentReminderRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends a payment receipt after a payment attempt (successful or failed). Customer name
-    /// and subscriber number are masked; amount is shown openly.
+    /// Sends a payment receipt after a payment attempt (successful or failed).
     /// </summary>
     Task<EmailDispatchResult> SendPaymentReceiptAsync(
         PaymentReceiptRequest request,

@@ -200,14 +200,20 @@ public class ReminderService : IReminderService
             }
         }
 
+        result.CleanedQueueItemCount = await _notificationQueueRepository.DeleteCompletedByTypeBeforeDateAsync(
+            DueReminderType,
+            referenceDate,
+            cancellationToken);
+
         _logger.LogInformation(
-            "Notification delivery completed. Processed={Processed}, Sent={Sent}, Failed={Failed}, RetryPending={RetryPending}, MaxRetry={MaxRetry}, Skipped={Skipped}, Errors={Errors}",
+            "Notification delivery completed. Processed={Processed}, Sent={Sent}, Failed={Failed}, RetryPending={RetryPending}, MaxRetry={MaxRetry}, Skipped={Skipped}, Cleaned={Cleaned}, Errors={Errors}",
             result.ProcessedItems,
             result.SentCount,
             result.FailedCount,
             result.PendingForRetryCount,
             result.MaxRetryReachedCount,
             result.SkippedClosedOrPaidCount,
+            result.CleanedQueueItemCount,
             result.ErrorCount);
 
         return result;
@@ -305,25 +311,23 @@ public class ReminderService : IReminderService
         InvoiceSyncRunResultResponse result,
         CancellationToken cancellationToken)
     {
-        var toDate = referenceDate.AddDays(leadDays);
-        var dueInvoices = await _invoiceRepository.GetUnpaidDueBetweenAsync(referenceDate, toDate, cancellationToken);
+        var safeLeadDays = Math.Max(1, leadDays);
+        var fromDate = referenceDate.AddDays(1);
+        var toDate = referenceDate.AddDays(safeLeadDays);
+        var dueInvoices = await _invoiceRepository.GetUnpaidDueBetweenAsync(fromDate, toDate, cancellationToken);
 
         foreach (var invoice in dueInvoices)
         {
             try
             {
-                var scheduledFor = invoice.DueDate.AddDays(-3);
-                if (scheduledFor < referenceDate)
-                {
-                    scheduledFor = referenceDate;
-                }
+                var scheduledFor = referenceDate;
 
                 var queueItem = new NotificationQueueItem
                 {
                     InvoiceId = invoice.Id,
                     UserId = invoice.UserId,
                     NotificationType = DueReminderType,
-                    IdempotencyKey = BuildIdempotencyKey(invoice.Id),
+                    IdempotencyKey = BuildIdempotencyKey(invoice.Id, referenceDate),
                     Status = NotificationQueueStatus.Pending,
                     ScheduledFor = scheduledFor,
                     Attempts = 0,
@@ -466,7 +470,8 @@ public class ReminderService : IReminderService
         return (int)exception.StatusCode.Value >= 500;
     }
 
-    private static string BuildIdempotencyKey(Guid invoiceId) => $"{invoiceId:D}__{DueReminderType}";
+    private static string BuildIdempotencyKey(Guid invoiceId, DateOnly runDate)
+        => $"{invoiceId:D}__{DueReminderType}__{runDate:yyyyMMdd}";
 
     private enum DeliveryOutcome
     {

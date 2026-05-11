@@ -12,7 +12,7 @@ import { formatCurrency } from '../../shared/format/amount'
 import { formatDateOnly, formatDateTime } from '../../shared/format/dateTime'
 import { paymentStatusLabel, subscriptionTypeLabel } from '../../shared/format/enums'
 import { parseProblemDetails } from '../../shared/errors/problem-details'
-import type { DebtItemResponse } from '../../shared/types'
+import type { DebtItemResponse, DebtQueryResponse } from '../../shared/types'
 
 export default function BillingPage() {
   const queryClient = useQueryClient()
@@ -41,7 +41,7 @@ export default function BillingPage() {
   const debtHistoryQuery = useQuery({
     queryKey: ['debt-history', subscriptionId],
     queryFn: () => subscriptionsApi.getDebtHistory(subscriptionId),
-    enabled: !!subscriptionId,
+    enabled: false,
   })
 
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1)
@@ -80,7 +80,7 @@ export default function BillingPage() {
     onSuccess: response => {
       setQueryError(null)
       setQuerySuccess(response.debts.length === 0 ? 'No unpaid debt found for selected subscription.' : 'Debt list updated.')
-      queryClient.invalidateQueries({ queryKey: ['debt-history', subscriptionId] })
+      queryClient.setQueryData(['debt-history', subscriptionId], response)
     },
     onError: error => {
       setQuerySuccess(null)
@@ -90,6 +90,7 @@ export default function BillingPage() {
   })
 
   const payMutation = useMutation({
+    retry: 0,
     mutationFn: (debtId: string) => {
       if (!subscriptionId) {
         throw new Error('Please select a subscription.')
@@ -97,6 +98,7 @@ export default function BillingPage() {
       return subscriptionsApi.createPayment(subscriptionId, debtId)
     },
     onSuccess: response => {
+      const paidDebtId = confirmDebt?.debtId
       setConfirmDebt(null)
       setPaymentError(null)
       setPaymentSuccess(
@@ -104,7 +106,18 @@ export default function BillingPage() {
           ? 'Payment completed successfully.'
           : 'Payment failed. Please try again.',
       )
-      queryClient.invalidateQueries({ queryKey: ['debt-history', subscriptionId] })
+      if (subscriptionId && paidDebtId) {
+        queryClient.setQueryData(['debt-history', subscriptionId], (previous: DebtQueryResponse | undefined) => {
+          if (!previous) {
+            return previous
+          }
+
+          return {
+            ...previous,
+            debts: previous.debts.filter(x => x.debtId !== paidDebtId),
+          }
+        })
+      }
       queryClient.invalidateQueries({ queryKey: ['subscription-payments', subscriptionId] })
       queryClient.invalidateQueries({ queryKey: ['main-account', user.customerId] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
@@ -129,6 +142,14 @@ export default function BillingPage() {
   const selectedSubscription = activeSubscriptions.find(x => x.id === subscriptionId)
   const debts = debtHistoryQuery.data?.debts ?? []
   const payments = paymentHistoryQuery.data?.items ?? []
+
+  function handleConfirmPayment() {
+    if (!confirmDebt || payMutation.isPending) {
+      return
+    }
+
+    payMutation.mutate(confirmDebt.debtId)
+  }
 
   return (
     <>
@@ -175,6 +196,7 @@ export default function BillingPage() {
                   setPaymentError(null)
                   setPaymentSuccess(null)
                   setConfirmDebt(null)
+                  queryClient.removeQueries({ queryKey: ['debt-history', nextValue] })
                   if (nextValue) {
                     setSearchParams({ subscriptionId: nextValue })
                   }
@@ -250,7 +272,7 @@ export default function BillingPage() {
                           onClick={() => setConfirmDebt(debt)}
                           disabled={payMutation.isPending}
                         >
-                          <SpinnerLabel loading={payMutation.isPending}>Pay</SpinnerLabel>
+                          Pay
                         </button>
                       </td>
                     </tr>
@@ -335,10 +357,11 @@ export default function BillingPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => payMutation.mutate(confirmDebt.debtId)}
+                onClick={handleConfirmPayment}
                 disabled={payMutation.isPending}
+                style={{ minWidth: '160px' }}
               >
-                <SpinnerLabel loading={payMutation.isPending}>Confirm payment</SpinnerLabel>
+                {payMutation.isPending ? 'Processing...' : 'Confirm payment'}
               </button>
             </>
           )}

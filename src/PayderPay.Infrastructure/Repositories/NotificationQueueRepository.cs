@@ -73,6 +73,19 @@ public class NotificationQueueRepository : INotificationQueueRepository
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
+    public async Task<int> DeleteCompletedByTypeBeforeDateAsync(
+        string notificationType,
+        DateOnly beforeDate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.NotificationQueueItems
+            .Where(x =>
+                x.NotificationType == notificationType &&
+                x.ScheduledFor < beforeDate &&
+                (x.Status == NotificationQueueStatus.Sent || x.Status == NotificationQueueStatus.Failed))
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
     public void Update(NotificationQueueItem queueItem)
     {
         _context.NotificationQueueItems.Update(queueItem);

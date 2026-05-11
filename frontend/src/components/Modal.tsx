@@ -12,6 +12,15 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const originalOverflow = document.body.style.overflow
+    const originalPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         onClose()
@@ -19,7 +28,11 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
     }
 
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = originalOverflow
+      document.body.style.paddingRight = originalPaddingRight
+    }
   }, [onClose])
 
   return (
