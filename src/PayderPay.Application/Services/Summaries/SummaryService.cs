@@ -1,5 +1,9 @@
+using Microsoft.Extensions.Options;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Interfaces.Security;
 using PayderPay.Application.Common;
+using PayderPay.Application.Common.Helpers;
+using PayderPay.Application.Common.Settings;
 using PayderPay.Application.Dtos.Summaries;
 using PayderPay.Application.Common.Exceptions;
 using PayderPay.Domain.Enums;
@@ -11,20 +15,34 @@ public class SummaryService : ISummaryService
     private readonly ICustomerRepository _customerRepository;
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IPaymentRepository _paymentRepository;
+    private readonly IRedisCacheStore _redisCacheStore;
+    private readonly TimeSpan _summaryCacheTtl;
 
     public SummaryService(
         ICustomerRepository customerRepository,
         ISubscriptionRepository subscriptionRepository,
-        IPaymentRepository paymentRepository)
+        IPaymentRepository paymentRepository,
+        IRedisCacheStore redisCacheStore,
+        IOptions<RedisSettings> redisSettings)
     {
         _customerRepository = customerRepository;
         _subscriptionRepository = subscriptionRepository;
         _paymentRepository = paymentRepository;
+        _redisCacheStore = redisCacheStore;
+        var ttl = redisSettings.Value.SummaryTtlSeconds;
+        _summaryCacheTtl = TimeSpan.FromSeconds(ttl > 0 ? ttl : 60);
     }
 
     public async Task<DashboardSummaryResponse> GetDashboardAsync(Guid customerId, int year, int month, CancellationToken cancellationToken = default)
     {
         ValidatePeriod(year, month);
+
+        var cacheKey = CacheKeyFactory.DashboardSummary(customerId, year, month);
+        var cached = await _redisCacheStore.GetAsync<DashboardSummaryResponse>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
 
         var unpaidSubscriptions = await GetUnpaidSubscriptionsAsync(customerId, year, month, cancellationToken);
         var payments = await _paymentRepository.GetByCustomerAsync(customerId, cancellationToken);
@@ -36,13 +54,16 @@ public class SummaryService : ISummaryService
         var activeSubscriptions = await _subscriptionRepository.GetByCustomerAsync(customerId, cancellationToken);
         var activeCount = activeSubscriptions.Count(x => x.Status == SubscriptionStatus.Active);
 
-        return new DashboardSummaryResponse
+        var response = new DashboardSummaryResponse
         {
             ActiveSubscriptionCount = activeCount,
             UnpaidThisMonthCount = unpaidSubscriptions.Count,
             SuccessfulPaymentsThisMonthTotal = successfulTotal,
             UnpaidSubscriptions = unpaidSubscriptions
         };
+
+        await _redisCacheStore.SetAsync(cacheKey, response, _summaryCacheTtl, cancellationToken);
+        return response;
     }
 
     public async Task<IReadOnlyList<UnpaidSubscriptionResponse>> GetUnpaidSubscriptionsAsync(Guid customerId, int year, int month, CancellationToken cancellationToken = default)
@@ -53,6 +74,13 @@ public class SummaryService : ISummaryService
             ?? throw new NotFoundException($"Customer '{customerId}' was not found.");
 
         _ = customer;
+
+        var cacheKey = CacheKeyFactory.UnpaidSubscriptions(customerId, year, month);
+        var cached = await _redisCacheStore.GetAsync<IReadOnlyList<UnpaidSubscriptionResponse>>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
 
         var subscriptions = await _subscriptionRepository.GetByCustomerAsync(customerId, cancellationToken);
         var activeSubscriptions = subscriptions.Where(x => x.Status == SubscriptionStatus.Active).ToList();
@@ -85,6 +113,7 @@ public class SummaryService : ISummaryService
             });
         }
 
+        await _redisCacheStore.SetAsync(cacheKey, unpaid, _summaryCacheTtl, cancellationToken);
         return unpaid;
     }
 

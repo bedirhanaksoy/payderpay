@@ -1,4 +1,5 @@
 using PayderPay.Application.Common.Exceptions;
+using PayderPay.Application.Common.Helpers;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.Security;
 using PayderPay.Application.Dtos.Auth;
@@ -15,6 +16,7 @@ public class AuthService : IAuthService
     private readonly IIbanGenerator _ibanGenerator;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
+    private readonly IRedisCacheStore _redisCacheStore;
     private readonly IUnitOfWork _unitOfWork;
 
     public AuthService(
@@ -24,6 +26,7 @@ public class AuthService : IAuthService
         IIbanGenerator ibanGenerator,
         IPasswordHasher passwordHasher,
         IJwtTokenGenerator jwtTokenGenerator,
+        IRedisCacheStore redisCacheStore,
         IUnitOfWork unitOfWork)
     {
         _customerRepository = customerRepository;
@@ -32,6 +35,7 @@ public class AuthService : IAuthService
         _ibanGenerator = ibanGenerator;
         _passwordHasher = passwordHasher;
         _jwtTokenGenerator = jwtTokenGenerator;
+        _redisCacheStore = redisCacheStore;
         _unitOfWork = unitOfWork;
     }
 
@@ -109,10 +113,42 @@ public class AuthService : IAuthService
         }
 
         var tokenHash = _jwtTokenGenerator.HashRefreshToken(tokenValue);
-        var storedRefreshToken = await _refreshTokenRepository.GetByHashAsync(tokenHash, cancellationToken);
+        var tokenCacheKey = CacheKeyFactory.RefreshToken(tokenHash);
+
+        var cachedToken = await _redisCacheStore.GetAsync<RefreshTokenCacheEntry>(tokenCacheKey, cancellationToken);
+        RefreshToken? storedRefreshToken = null;
+
+        if (cachedToken is not null)
+        {
+            if (cachedToken.ExpiresAtUtc <= DateTime.UtcNow ||
+                await IsLoggedOutAfterIssueAsync(cachedToken.CustomerId, cachedToken.IssuedAtUtc, cancellationToken))
+            {
+                await _redisCacheStore.RemoveAsync(tokenCacheKey, cancellationToken);
+                throw new UnauthorizedException("Refresh token is invalid or expired.");
+            }
+
+            storedRefreshToken = await _refreshTokenRepository.GetByHashAsync(tokenHash, cancellationToken);
+        }
+        else
+        {
+            storedRefreshToken = await _refreshTokenRepository.GetByHashAsync(tokenHash, cancellationToken);
+            if (storedRefreshToken is not null &&
+                storedRefreshToken.IsActive &&
+                !await IsLoggedOutAfterIssueAsync(storedRefreshToken.CustomerId, storedRefreshToken.CreatedAtUtc, cancellationToken))
+            {
+                await CacheRefreshTokenAsync(storedRefreshToken, cancellationToken);
+            }
+        }
 
         if (storedRefreshToken is null || !storedRefreshToken.IsActive)
         {
+            await _redisCacheStore.RemoveAsync(tokenCacheKey, cancellationToken);
+            throw new UnauthorizedException("Refresh token is invalid or expired.");
+        }
+
+        if (await IsLoggedOutAfterIssueAsync(storedRefreshToken.CustomerId, storedRefreshToken.CreatedAtUtc, cancellationToken))
+        {
+            await _redisCacheStore.RemoveAsync(tokenCacheKey, cancellationToken);
             throw new UnauthorizedException("Refresh token is invalid or expired.");
         }
 
@@ -125,6 +161,7 @@ public class AuthService : IAuthService
         storedRefreshToken.RevokedAtUtc = DateTime.UtcNow;
         _refreshTokenRepository.Update(storedRefreshToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _redisCacheStore.RemoveAsync(tokenCacheKey, cancellationToken);
 
         return await IssueTokensAsync(customer, cancellationToken);
     }
@@ -138,6 +175,11 @@ public class AuthService : IAuthService
 
         await _refreshTokenRepository.RevokeAllForCustomerAsync(customerId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _redisCacheStore.SetAsync(
+            CacheKeyFactory.LogoutAfter(customerId),
+            new LogoutAfterCacheEntry { LoggedOutAfterUtc = DateTime.UtcNow },
+            TimeSpan.FromDays(30),
+            cancellationToken);
     }
 
     private async Task<AuthResponse> IssueTokensAsync(Customer customer, CancellationToken cancellationToken)
@@ -155,6 +197,7 @@ public class AuthService : IAuthService
 
         await _refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await CacheRefreshTokenAsync(refreshToken, cancellationToken);
 
         return new AuthResponse
         {
@@ -164,6 +207,35 @@ public class AuthService : IAuthService
             RefreshTokenExpiresAtUtc = refreshTokenExpiry,
             Customer = ToCustomerResponse(customer)
         };
+    }
+
+    private async Task CacheRefreshTokenAsync(RefreshToken token, CancellationToken cancellationToken)
+    {
+        var ttl = token.ExpiresAtUtc - DateTime.UtcNow;
+        if (ttl <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        await _redisCacheStore.SetAsync(
+            CacheKeyFactory.RefreshToken(token.TokenHash),
+            new RefreshTokenCacheEntry
+            {
+                CustomerId = token.CustomerId,
+                ExpiresAtUtc = token.ExpiresAtUtc,
+                IssuedAtUtc = token.CreatedAtUtc
+            },
+            ttl,
+            cancellationToken);
+    }
+
+    private async Task<bool> IsLoggedOutAfterIssueAsync(Guid customerId, DateTime issuedAtUtc, CancellationToken cancellationToken)
+    {
+        var marker = await _redisCacheStore.GetAsync<LogoutAfterCacheEntry>(
+            CacheKeyFactory.LogoutAfter(customerId),
+            cancellationToken);
+
+        return marker is not null && issuedAtUtc <= marker.LoggedOutAfterUtc;
     }
 
     private static CustomerResponse ToCustomerResponse(Customer customer)
@@ -178,5 +250,17 @@ public class AuthService : IAuthService
             CreatedAtUtc = customer.CreatedAtUtc,
             UpdatedAtUtc = customer.UpdatedAtUtc
         };
+    }
+
+    private sealed class RefreshTokenCacheEntry
+    {
+        public Guid CustomerId { get; set; }
+        public DateTime ExpiresAtUtc { get; set; }
+        public DateTime IssuedAtUtc { get; set; }
+    }
+
+    private sealed class LogoutAfterCacheEntry
+    {
+        public DateTime LoggedOutAfterUtc { get; set; }
     }
 }

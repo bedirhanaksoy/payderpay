@@ -3,6 +3,7 @@ using PayderPay.Application.Common.Exceptions;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Interfaces.Security;
 using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.Debts;
 using PayderPay.Application.Dtos.External;
@@ -157,6 +158,25 @@ public class PaymentServiceTests
         Assert.Equal(500m, mainAccountRepository.MainAccount.Balance);
     }
 
+    [Fact]
+    public async Task CreateAsync_ShouldUseLiveDebtQueryForRevalidation()
+    {
+        var gateway = new FakePaymentGatewayClient(success: false);
+        var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
+        var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 500m);
+        var debtRepository = new InMemoryDebtQueryResultRepository(debtBelongsToSubscription: true);
+        var debtQueryService = new FakeDebtQueryService(TestData.SubscriptionId, [CreateLiveDebt(250m)]);
+
+        var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtQueryService, debtRepository: debtRepository);
+
+        _ = await service.CreateAsync(
+            TestData.SubscriptionId,
+            new CreatePaymentRequest { DebtId = TestData.DebtId });
+
+        Assert.Equal(1, debtQueryService.QueryLiveCallCount);
+        Assert.Equal(0, debtQueryService.QueryCallCount);
+    }
+
     private static PaymentService BuildService(
         InMemoryPaymentRepository paymentRepository,
         InMemoryMainAccountRepository mainAccountRepository,
@@ -176,6 +196,7 @@ public class PaymentServiceTests
             new InMemoryNotificationLogRepository(),
             gateway,
             new FakeEmailNotificationService(),
+            new InMemoryRedisCacheStore(),
             new FakeUnitOfWork(),
             NullLogger<PaymentService>.Instance);
     }
@@ -326,8 +347,13 @@ public class PaymentServiceTests
             _debts = debts;
         }
 
+        public int QueryCallCount { get; private set; }
+        public int QueryLiveCallCount { get; private set; }
+
         public Task<DebtQueryResponse> QueryAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
         {
+            QueryCallCount++;
+
             if (subscriptionId != _subscriptionId)
             {
                 return Task.FromResult(new DebtQueryResponse
@@ -349,6 +375,28 @@ public class PaymentServiceTests
         public Task<DebtQueryResponse> GetCurrentAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
         {
             return QueryAsync(subscriptionId, cancellationToken);
+        }
+
+        public Task<DebtQueryResponse> QueryLiveAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+        {
+            QueryLiveCallCount++;
+
+            if (subscriptionId != _subscriptionId)
+            {
+                return Task.FromResult(new DebtQueryResponse
+                {
+                    SubscriptionId = subscriptionId,
+                    SubscriberNumber = string.Empty,
+                    Debts = Array.Empty<DebtQueryHistoryItemResponse>()
+                });
+            }
+
+            return Task.FromResult(new DebtQueryResponse
+            {
+                SubscriptionId = _subscriptionId,
+                SubscriberNumber = "SUB-1",
+                Debts = _debts
+            });
         }
     }
 
@@ -418,6 +466,24 @@ public class PaymentServiceTests
         public Task AddAsync(Payment payment, CancellationToken cancellationToken = default)
         {
             AddedPayments.Add(payment);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class InMemoryRedisCacheStore : IRedisCacheStore
+    {
+        public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<T?>(default);
+        }
+
+        public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
+        {
             return Task.CompletedTask;
         }
     }

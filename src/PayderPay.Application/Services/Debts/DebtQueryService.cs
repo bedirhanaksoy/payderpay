@@ -1,11 +1,15 @@
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.External;
+using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Common.Helpers;
+using PayderPay.Application.Common.Settings;
 using PayderPay.Application.Dtos.Debts;
 using PayderPay.Application.Dtos.External;
 using PayderPay.Application.Common.Exceptions;
 using PayderPay.Domain.Entities;
 using PayderPay.Domain.Enums;
 using System.Net;
+using Microsoft.Extensions.Options;
 
 namespace PayderPay.Application.Services;
 
@@ -14,21 +18,43 @@ public class DebtQueryService : IDebtQueryService
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IDebtQueryResultRepository _debtQueryResultRepository;
     private readonly IDebtProviderClient _debtProviderClient;
+    private readonly IRedisCacheStore _redisCacheStore;
+    private readonly TimeSpan _debtCacheTtl;
     private readonly IUnitOfWork _unitOfWork;
 
     public DebtQueryService(
         ISubscriptionRepository subscriptionRepository,
         IDebtQueryResultRepository debtQueryResultRepository,
         IDebtProviderClient debtProviderClient,
+        IRedisCacheStore redisCacheStore,
+        IOptions<RedisSettings> redisSettings,
         IUnitOfWork unitOfWork)
     {
         _subscriptionRepository = subscriptionRepository;
         _debtQueryResultRepository = debtQueryResultRepository;
         _debtProviderClient = debtProviderClient;
+        _redisCacheStore = redisCacheStore;
+        var ttl = redisSettings.Value.DebtTtlSeconds;
+        _debtCacheTtl = TimeSpan.FromSeconds(ttl > 0 ? ttl : 60);
         _unitOfWork = unitOfWork;
     }
 
     public async Task<DebtQueryResponse> QueryAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    {
+        return await QueryInternalAsync(subscriptionId, useCache: true, cancellationToken);
+    }
+
+    public async Task<DebtQueryResponse> QueryLiveAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    {
+        return await QueryInternalAsync(subscriptionId, useCache: false, cancellationToken);
+    }
+
+    public async Task<DebtQueryResponse> GetCurrentAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    {
+        return await QueryAsync(subscriptionId, cancellationToken);
+    }
+
+    private async Task<DebtQueryResponse> QueryInternalAsync(Guid subscriptionId, bool useCache, CancellationToken cancellationToken)
     {
         var subscription = await _subscriptionRepository.GetByIdAsync(subscriptionId, cancellationToken)
             ?? throw new NotFoundException($"Subscription '{subscriptionId}' was not found.");
@@ -43,23 +69,7 @@ public class DebtQueryService : IDebtQueryService
             SubscriberNumber = subscription.SubscriberNumber
         };
 
-        DebtProviderQueryResponse providerResponse;
-        try
-        {
-            providerResponse = await _debtProviderClient.QueryDebtAsync(providerRequest, cancellationToken);
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            providerResponse = new DebtProviderQueryResponse
-            {
-                SubscriberNumber = subscription.SubscriberNumber,
-                Debts = Array.Empty<DebtProviderDebtItem>()
-            };
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new BadRequestException("Debt query request is invalid.");
-        }
+        var providerResponse = await GetProviderResponseAsync(providerRequest, useCache, cancellationToken);
 
         var queriedAtUtc = DateTime.UtcNow;
         var currentSnapshots = providerResponse.Debts
@@ -104,9 +114,58 @@ public class DebtQueryService : IDebtQueryService
         return BuildResponse(subscription, currentSnapshots);
     }
 
-    public async Task<DebtQueryResponse> GetCurrentAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    private async Task<DebtProviderQueryResponse> GetProviderResponseAsync(
+        DebtProviderQueryRequest request,
+        bool useCache,
+        CancellationToken cancellationToken)
     {
-        return await QueryAsync(subscriptionId, cancellationToken);
+        var cacheKey = CacheKeyFactory.DebtBySubscriber(request.SubscriberNumber);
+        if (useCache)
+        {
+            var cached = await _redisCacheStore.GetAsync<DebtProviderQueryResponse>(cacheKey, cancellationToken);
+            if (cached is not null)
+            {
+                return NormalizeProviderResponse(cached, request.SubscriberNumber);
+            }
+        }
+
+        DebtProviderQueryResponse providerResponse;
+        try
+        {
+            providerResponse = await _debtProviderClient.QueryDebtAsync(request, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            providerResponse = new DebtProviderQueryResponse
+            {
+                SubscriberNumber = request.SubscriberNumber,
+                Debts = Array.Empty<DebtProviderDebtItem>()
+            };
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new BadRequestException("Debt query request is invalid.");
+        }
+
+        providerResponse = NormalizeProviderResponse(providerResponse, request.SubscriberNumber);
+
+        if (useCache)
+        {
+            await _redisCacheStore.SetAsync(cacheKey, providerResponse, _debtCacheTtl, cancellationToken);
+        }
+
+        return providerResponse;
+    }
+
+    private static DebtProviderQueryResponse NormalizeProviderResponse(DebtProviderQueryResponse response, string fallbackSubscriberNumber)
+    {
+        return new DebtProviderQueryResponse
+        {
+            SubscriberNumber = string.IsNullOrWhiteSpace(response.SubscriberNumber)
+                ? fallbackSubscriberNumber
+                : response.SubscriberNumber,
+            Debts = response.Debts ?? Array.Empty<DebtProviderDebtItem>()
+        };
     }
 
     private static DebtQueryResponse BuildResponse(Subscription subscription, IReadOnlyList<DebtQueryResult> items)

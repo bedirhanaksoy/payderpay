@@ -1,6 +1,10 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using PayderPay.Application.Common.Helpers;
 using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Common.Interfaces.Repositories;
+using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Common.Settings;
 using PayderPay.Application.Dtos.Subscriptions;
 using PayderPay.Application.Common.Exceptions;
 using PayderPay.Domain.Entities;
@@ -16,6 +20,8 @@ public class SubscriptionService : ISubscriptionService
     private readonly ICustomerRepository _customerRepository;
     private readonly IDebtQueryResultRepository _debtQueryResultRepository;
     private readonly IDebtQueryService _debtQueryService;
+    private readonly IRedisCacheStore _redisCacheStore;
+    private readonly TimeSpan _subscriptionsCacheTtl;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<SubscriptionService> _logger;
 
@@ -24,6 +30,8 @@ public class SubscriptionService : ISubscriptionService
         ICustomerRepository customerRepository,
         IDebtQueryResultRepository debtQueryResultRepository,
         IDebtQueryService debtQueryService,
+        IRedisCacheStore redisCacheStore,
+        IOptions<RedisSettings> redisSettings,
         IUnitOfWork unitOfWork,
         ILogger<SubscriptionService> logger)
     {
@@ -31,6 +39,9 @@ public class SubscriptionService : ISubscriptionService
         _customerRepository = customerRepository;
         _debtQueryResultRepository = debtQueryResultRepository;
         _debtQueryService = debtQueryService;
+        _redisCacheStore = redisCacheStore;
+        var ttl = redisSettings.Value.SubscriptionsTtlSeconds;
+        _subscriptionsCacheTtl = TimeSpan.FromSeconds(ttl > 0 ? ttl : 60);
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -59,6 +70,7 @@ public class SubscriptionService : ISubscriptionService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         await TryRefreshDueDayFromProviderAsync(subscription, cancellationToken);
+        await InvalidateSubscriptionCachesAsync(subscription.CustomerId, cancellationToken);
         var currentDueDate = await GetCurrentDueDateAsync(subscription.Id, cancellationToken);
 
         return ToResponse(subscription, currentDueDate);
@@ -78,6 +90,7 @@ public class SubscriptionService : ISubscriptionService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         await TryRefreshDueDayFromProviderAsync(existing, cancellationToken);
+        await InvalidateSubscriptionCachesAsync(existing.CustomerId, cancellationToken);
         var currentDueDate = await GetCurrentDueDateAsync(existing.Id, cancellationToken);
 
         return ToResponse(existing, currentDueDate);
@@ -90,6 +103,7 @@ public class SubscriptionService : ISubscriptionService
 
         await _subscriptionRepository.SoftDeleteAsync(existing.Id, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await InvalidateSubscriptionCachesAsync(existing.CustomerId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SubscriptionResponse>> GetByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
@@ -99,14 +113,32 @@ public class SubscriptionService : ISubscriptionService
 
         _ = customer;
 
+        var cacheKey = CacheKeyFactory.SubscriptionsAll(customerId);
+        var cached = await _redisCacheStore.GetAsync<IReadOnlyList<SubscriptionResponse>>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         var subscriptions = await _subscriptionRepository.GetByCustomerAsync(customerId, cancellationToken);
-        return await ToResponsesAsync(subscriptions, cancellationToken);
+        var response = await ToResponsesAsync(subscriptions, cancellationToken);
+        await _redisCacheStore.SetAsync(cacheKey, response, _subscriptionsCacheTtl, cancellationToken);
+        return response;
     }
 
     public async Task<IReadOnlyList<SubscriptionResponse>> GetActiveAsync(CancellationToken cancellationToken = default)
     {
+        var cacheKey = CacheKeyFactory.SubscriptionsActiveAll();
+        var cached = await _redisCacheStore.GetAsync<IReadOnlyList<SubscriptionResponse>>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         var subscriptions = await _subscriptionRepository.GetActiveAsync(cancellationToken);
-        return await ToResponsesAsync(subscriptions, cancellationToken);
+        var response = await ToResponsesAsync(subscriptions, cancellationToken);
+        await _redisCacheStore.SetAsync(cacheKey, response, _subscriptionsCacheTtl, cancellationToken);
+        return response;
     }
 
     public async Task<PagedResult<SubscriptionResponse>> GetByCustomerPagedAsync(
@@ -193,6 +225,12 @@ public class SubscriptionService : ISubscriptionService
                 "Debt provider request failed while refreshing due date for subscription {SubscriptionId}.",
                 subscription.Id);
         }
+    }
+
+    private async Task InvalidateSubscriptionCachesAsync(Guid customerId, CancellationToken cancellationToken)
+    {
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.SubscriptionsAll(customerId), cancellationToken);
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.SubscriptionsActiveAll(), cancellationToken);
     }
 
     private static SubscriptionResponse ToResponse(Subscription subscription, DateOnly? currentDueDate)

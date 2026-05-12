@@ -1,9 +1,12 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using PayderPay.Application.Common.Helpers;
 using PayderPay.Application.Common.Interfaces.External;
 using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.Security;
+using PayderPay.Application.Common.Settings;
 using PayderPay.Application.Dtos.External;
 using PayderPay.Application.Dtos.Reminders;
 using PayderPay.Domain.Entities;
@@ -18,6 +21,8 @@ public class ReminderService : IReminderService
 
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IDebtProviderClient _debtProviderClient;
+    private readonly IRedisCacheStore _redisCacheStore;
+    private readonly TimeSpan _debtCacheTtl;
     private readonly IInvoiceRepository _invoiceRepository;
     private readonly INotificationQueueRepository _notificationQueueRepository;
     private readonly IPaymentRepository _paymentRepository;
@@ -28,6 +33,8 @@ public class ReminderService : IReminderService
     public ReminderService(
         ISubscriptionRepository subscriptionRepository,
         IDebtProviderClient debtProviderClient,
+        IRedisCacheStore redisCacheStore,
+        IOptions<RedisSettings> redisSettings,
         IInvoiceRepository invoiceRepository,
         INotificationQueueRepository notificationQueueRepository,
         IPaymentRepository paymentRepository,
@@ -37,6 +44,9 @@ public class ReminderService : IReminderService
     {
         _subscriptionRepository = subscriptionRepository;
         _debtProviderClient = debtProviderClient;
+        _redisCacheStore = redisCacheStore;
+        var ttl = redisSettings.Value.DebtTtlSeconds;
+        _debtCacheTtl = TimeSpan.FromSeconds(ttl > 0 ? ttl : 60);
         _invoiceRepository = invoiceRepository;
         _notificationQueueRepository = notificationQueueRepository;
         _paymentRepository = paymentRepository;
@@ -226,21 +236,7 @@ public class ReminderService : IReminderService
         CancellationToken cancellationToken)
     {
         DebtProviderQueryResponse providerResponse;
-        try
-        {
-            providerResponse = await _debtProviderClient.QueryDebtAsync(new DebtProviderQueryRequest
-            {
-                SubscriberNumber = subscription.SubscriberNumber
-            }, cancellationToken);
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            providerResponse = new DebtProviderQueryResponse
-            {
-                SubscriberNumber = subscription.SubscriberNumber,
-                Debts = Array.Empty<DebtProviderDebtItem>()
-            };
-        }
+        providerResponse = await GetProviderResponseWithCacheAsync(subscription.SubscriberNumber, cancellationToken);
 
         var nowUtc = DateTime.UtcNow;
         var currentExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -472,6 +468,50 @@ public class ReminderService : IReminderService
 
     private static string BuildIdempotencyKey(Guid invoiceId, DateOnly runDate)
         => $"{invoiceId:D}__{DueReminderType}__{runDate:yyyyMMdd}";
+
+    private async Task<DebtProviderQueryResponse> GetProviderResponseWithCacheAsync(
+        string subscriberNumber,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = CacheKeyFactory.DebtBySubscriber(subscriberNumber);
+        var cached = await _redisCacheStore.GetAsync<DebtProviderQueryResponse>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return NormalizeResponse(cached, subscriberNumber);
+        }
+
+        DebtProviderQueryResponse liveResponse;
+        try
+        {
+            liveResponse = await _debtProviderClient.QueryDebtAsync(new DebtProviderQueryRequest
+            {
+                SubscriberNumber = subscriberNumber
+            }, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            liveResponse = new DebtProviderQueryResponse
+            {
+                SubscriberNumber = subscriberNumber,
+                Debts = Array.Empty<DebtProviderDebtItem>()
+            };
+        }
+
+        var normalized = NormalizeResponse(liveResponse, subscriberNumber);
+        await _redisCacheStore.SetAsync(cacheKey, normalized, _debtCacheTtl, cancellationToken);
+        return normalized;
+    }
+
+    private static DebtProviderQueryResponse NormalizeResponse(DebtProviderQueryResponse response, string fallbackSubscriberNumber)
+    {
+        return new DebtProviderQueryResponse
+        {
+            SubscriberNumber = string.IsNullOrWhiteSpace(response.SubscriberNumber)
+                ? fallbackSubscriberNumber
+                : response.SubscriberNumber,
+            Debts = response.Debts ?? Array.Empty<DebtProviderDebtItem>()
+        };
+    }
 
     private enum DeliveryOutcome
     {

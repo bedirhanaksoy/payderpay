@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
+using PayderPay.Application.Common.Helpers;
 using PayderPay.Application.Common.Interfaces.Notifications;
 using PayderPay.Application.Common.Interfaces.Repositories;
 using PayderPay.Application.Common.Interfaces.External;
+using PayderPay.Application.Common.Interfaces.Security;
 using PayderPay.Application.Common.Pagination;
 using PayderPay.Application.Dtos.External;
 using PayderPay.Application.Dtos.Payments;
@@ -21,6 +23,7 @@ public class PaymentService : IPaymentService
     private readonly INotificationLogRepository _notificationLogRepository;
     private readonly IPaymentGatewayClient _paymentGatewayClient;
     private readonly IEmailNotificationService _emailNotificationService;
+    private readonly IRedisCacheStore _redisCacheStore;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<PaymentService> _logger;
 
@@ -33,6 +36,7 @@ public class PaymentService : IPaymentService
         INotificationLogRepository notificationLogRepository,
         IPaymentGatewayClient paymentGatewayClient,
         IEmailNotificationService emailNotificationService,
+        IRedisCacheStore redisCacheStore,
         IUnitOfWork unitOfWork,
         ILogger<PaymentService> logger)
     {
@@ -44,6 +48,7 @@ public class PaymentService : IPaymentService
         _notificationLogRepository = notificationLogRepository;
         _paymentGatewayClient = paymentGatewayClient;
         _emailNotificationService = emailNotificationService;
+        _redisCacheStore = redisCacheStore;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -64,7 +69,7 @@ public class PaymentService : IPaymentService
             cancellationToken)
             ?? await ThrowDebtConflictAsync(request.DebtId, cancellationToken);
 
-        var refreshedDebtState = await _debtQueryService.QueryAsync(subscriptionId, cancellationToken);
+        var refreshedDebtState = await _debtQueryService.QueryLiveAsync(subscriptionId, cancellationToken);
         var validatedDebt = refreshedDebtState.Debts.FirstOrDefault(x => x.DebtId == request.DebtId);
 
         if (validatedDebt is null)
@@ -146,6 +151,11 @@ public class PaymentService : IPaymentService
             throw;
         }
 
+        if (gatewayResponse.IsSuccessful)
+        {
+            await InvalidateCachesAfterSuccessfulPaymentAsync(subscription, payment, cancellationToken);
+        }
+
         await SendReceiptEmailAsync(subscription, payment, cancellationToken);
 
         return new PaymentResponse
@@ -161,6 +171,18 @@ public class PaymentService : IPaymentService
             ExternalTransactionId = payment.ExternalTransactionId,
             FailureReason = payment.FailureReason
         };
+    }
+
+    private async Task InvalidateCachesAfterSuccessfulPaymentAsync(
+        Subscription subscription,
+        Payment payment,
+        CancellationToken cancellationToken)
+    {
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.DebtBySubscriber(subscription.SubscriberNumber), cancellationToken);
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.DashboardSummary(subscription.CustomerId, payment.PeriodYear, payment.PeriodMonth), cancellationToken);
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.UnpaidSubscriptions(subscription.CustomerId, payment.PeriodYear, payment.PeriodMonth), cancellationToken);
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.SubscriptionsAll(subscription.CustomerId), cancellationToken);
+        await _redisCacheStore.RemoveAsync(CacheKeyFactory.SubscriptionsActiveAll(), cancellationToken);
     }
 
     private async Task<DebtQueryResult> ThrowDebtConflictAsync(Guid debtId, CancellationToken cancellationToken)
