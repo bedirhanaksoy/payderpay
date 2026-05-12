@@ -4,9 +4,9 @@ using PayderPay.Domain.Entities;
 
 namespace PayderPay.Infrastructure.Persistence.Configurations;
 
-public class DebtQueryResultConfiguration : IEntityTypeConfiguration<DebtQueryResult>
+public class DebtConfiguration : IEntityTypeConfiguration<Debt>
 {
-    public void Configure(EntityTypeBuilder<DebtQueryResult> builder)
+    public void Configure(EntityTypeBuilder<Debt> builder)
     {
         builder.ToTable("DebtQueryResults", tableBuilder =>
         {

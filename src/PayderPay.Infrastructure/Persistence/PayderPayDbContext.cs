@@ -16,7 +16,7 @@ public class PayderPayDbContext : DbContext
     public DbSet<MainAccount> MainAccounts => Set<MainAccount>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Payment> Payments => Set<Payment>();
-    public DbSet<DebtQueryResult> DebtQueryResults => Set<DebtQueryResult>();
+    public DbSet<Debt> Debts => Set<Debt>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<NotificationQueueItem> NotificationQueueItems => Set<NotificationQueueItem>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();

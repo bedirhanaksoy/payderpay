@@ -72,7 +72,7 @@ public static class DependencyInjection
         services.AddScoped<IMainAccountRepository, MainAccountRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
-        services.AddScoped<IDebtQueryResultRepository, DebtQueryResultRepository>();
+        services.AddScoped<IDebtRepository, DebtRepository>();
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
         services.AddScoped<INotificationQueueRepository, NotificationQueueRepository>();
         services.AddScoped<INotificationLogRepository, NotificationLogRepository>();

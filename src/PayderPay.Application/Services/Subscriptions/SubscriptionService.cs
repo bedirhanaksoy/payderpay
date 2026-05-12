@@ -18,7 +18,7 @@ public class SubscriptionService : ISubscriptionService
 
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly ICustomerRepository _customerRepository;
-    private readonly IDebtQueryResultRepository _debtQueryResultRepository;
+    private readonly IDebtRepository _debtRepository;
     private readonly IDebtQueryService _debtQueryService;
     private readonly IRedisCacheStore _redisCacheStore;
     private readonly TimeSpan _subscriptionsCacheTtl;
@@ -28,7 +28,7 @@ public class SubscriptionService : ISubscriptionService
     public SubscriptionService(
         ISubscriptionRepository subscriptionRepository,
         ICustomerRepository customerRepository,
-        IDebtQueryResultRepository debtQueryResultRepository,
+        IDebtRepository debtRepository,
         IDebtQueryService debtQueryService,
         IRedisCacheStore redisCacheStore,
         IOptions<RedisSettings> redisSettings,
@@ -37,7 +37,7 @@ public class SubscriptionService : ISubscriptionService
     {
         _subscriptionRepository = subscriptionRepository;
         _customerRepository = customerRepository;
-        _debtQueryResultRepository = debtQueryResultRepository;
+        _debtRepository = debtRepository;
         _debtQueryService = debtQueryService;
         _redisCacheStore = redisCacheStore;
         var ttl = redisSettings.Value.SubscriptionsTtlSeconds;
@@ -182,7 +182,7 @@ public class SubscriptionService : ISubscriptionService
 
     private async Task<DateOnly?> GetCurrentDueDateAsync(Guid subscriptionId, CancellationToken cancellationToken)
     {
-        var debts = await _debtQueryResultRepository.GetCurrentBySubscriptionAsync(subscriptionId, cancellationToken);
+        var debts = await _debtRepository.GetCurrentBySubscriptionAsync(subscriptionId, cancellationToken);
         return debts.Count == 0 ? null : debts[0].DueDate;
     }
 

@@ -5,43 +5,43 @@ using PayderPay.Infrastructure.Persistence;
 
 namespace PayderPay.Infrastructure.Repositories;
 
-public class DebtQueryResultRepository : IDebtQueryResultRepository
+public class DebtRepository : IDebtRepository
 {
     private readonly PayderPayDbContext _context;
 
-    public DebtQueryResultRepository(PayderPayDbContext context)
+    public DebtRepository(PayderPayDbContext context)
     {
         _context = context;
     }
 
-    public async Task AddAsync(DebtQueryResult debtQueryResult, CancellationToken cancellationToken = default)
+    public async Task AddAsync(Debt debt, CancellationToken cancellationToken = default)
     {
-        await _context.DebtQueryResults.AddAsync(debtQueryResult, cancellationToken);
+        await _context.Debts.AddAsync(debt, cancellationToken);
     }
 
-    public async Task AddRangeAsync(IReadOnlyList<DebtQueryResult> debtQueryResults, CancellationToken cancellationToken = default)
+    public async Task AddRangeAsync(IReadOnlyList<Debt> debts, CancellationToken cancellationToken = default)
     {
-        if (debtQueryResults.Count == 0)
+        if (debts.Count == 0)
         {
             return;
         }
 
-        await _context.DebtQueryResults.AddRangeAsync(debtQueryResults, cancellationToken);
+        await _context.Debts.AddRangeAsync(debts, cancellationToken);
     }
 
-    public async Task<DebtQueryResult?> GetCurrentBySubscriptionAndDebtIdAsync(
+    public async Task<Debt?> GetCurrentBySubscriptionAndDebtIdAsync(
         Guid subscriptionId,
         Guid debtId,
         CancellationToken cancellationToken = default)
     {
-        return await _context.DebtQueryResults
+        return await _context.Debts
             .Where(x => x.SubscriptionId == subscriptionId && x.DebtId == debtId)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<DebtQueryResult>> GetCurrentBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Debt>> GetCurrentBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
     {
-        return await _context.DebtQueryResults
+        return await _context.Debts
             .AsNoTracking()
             .Where(x => x.SubscriptionId == subscriptionId)
             .OrderBy(x => x.DueDate)
@@ -50,7 +50,7 @@ public class DebtQueryResultRepository : IDebtQueryResultRepository
 
     public async Task SoftDeleteCurrentBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
     {
-        var currentItems = await _context.DebtQueryResults
+        var currentItems = await _context.Debts
             .Where(x => x.SubscriptionId == subscriptionId)
             .ToListAsync(cancellationToken);
 
@@ -68,8 +68,8 @@ public class DebtQueryResultRepository : IDebtQueryResultRepository
         }
     }
 
-    public void Update(DebtQueryResult debtQueryResult)
+    public void Update(Debt debt)
     {
-        _context.DebtQueryResults.Update(debtQueryResult);
+        _context.Debts.Update(debt);
     }
 }

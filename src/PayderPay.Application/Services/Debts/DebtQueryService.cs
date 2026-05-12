@@ -16,7 +16,7 @@ namespace PayderPay.Application.Services;
 public class DebtQueryService : IDebtQueryService
 {
     private readonly ISubscriptionRepository _subscriptionRepository;
-    private readonly IDebtQueryResultRepository _debtQueryResultRepository;
+    private readonly IDebtRepository _debtRepository;
     private readonly IDebtProviderClient _debtProviderClient;
     private readonly IRedisCacheStore _redisCacheStore;
     private readonly TimeSpan _debtCacheTtl;
@@ -24,14 +24,14 @@ public class DebtQueryService : IDebtQueryService
 
     public DebtQueryService(
         ISubscriptionRepository subscriptionRepository,
-        IDebtQueryResultRepository debtQueryResultRepository,
+        IDebtRepository debtRepository,
         IDebtProviderClient debtProviderClient,
         IRedisCacheStore redisCacheStore,
         IOptions<RedisSettings> redisSettings,
         IUnitOfWork unitOfWork)
     {
         _subscriptionRepository = subscriptionRepository;
-        _debtQueryResultRepository = debtQueryResultRepository;
+        _debtRepository = debtRepository;
         _debtProviderClient = debtProviderClient;
         _redisCacheStore = redisCacheStore;
         var ttl = redisSettings.Value.DebtTtlSeconds;
@@ -73,7 +73,7 @@ public class DebtQueryService : IDebtQueryService
 
         var queriedAtUtc = DateTime.UtcNow;
         var currentSnapshots = providerResponse.Debts
-            .Select(item => new DebtQueryResult
+            .Select(item => new Debt
             {
                 DebtId = item.DebtId,
                 SubscriptionId = subscription.Id,
@@ -95,11 +95,11 @@ public class DebtQueryService : IDebtQueryService
         await _unitOfWork.BeginTransactionAsync(cancellationToken);
         try
         {
-            await _debtQueryResultRepository.SoftDeleteCurrentBySubscriptionAsync(subscription.Id, cancellationToken);
+            await _debtRepository.SoftDeleteCurrentBySubscriptionAsync(subscription.Id, cancellationToken);
 
             if (currentSnapshots.Count > 0)
             {
-                await _debtQueryResultRepository.AddRangeAsync(currentSnapshots, cancellationToken);
+                await _debtRepository.AddRangeAsync(currentSnapshots, cancellationToken);
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -168,7 +168,7 @@ public class DebtQueryService : IDebtQueryService
         };
     }
 
-    private static DebtQueryResponse BuildResponse(Subscription subscription, IReadOnlyList<DebtQueryResult> items)
+    private static DebtQueryResponse BuildResponse(Subscription subscription, IReadOnlyList<Debt> items)
     {
         var debts = items
             .OrderBy(x => x.DueDate)

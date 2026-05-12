@@ -17,7 +17,7 @@ public class PaymentService : IPaymentService
 {
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IDebtQueryService _debtQueryService;
-    private readonly IDebtQueryResultRepository _debtQueryResultRepository;
+    private readonly IDebtRepository _debtRepository;
     private readonly IMainAccountRepository _mainAccountRepository;
     private readonly IPaymentRepository _paymentRepository;
     private readonly INotificationLogRepository _notificationLogRepository;
@@ -30,7 +30,7 @@ public class PaymentService : IPaymentService
     public PaymentService(
         ISubscriptionRepository subscriptionRepository,
         IDebtQueryService debtQueryService,
-        IDebtQueryResultRepository debtQueryResultRepository,
+        IDebtRepository debtRepository,
         IMainAccountRepository mainAccountRepository,
         IPaymentRepository paymentRepository,
         INotificationLogRepository notificationLogRepository,
@@ -42,7 +42,7 @@ public class PaymentService : IPaymentService
     {
         _subscriptionRepository = subscriptionRepository;
         _debtQueryService = debtQueryService;
-        _debtQueryResultRepository = debtQueryResultRepository;
+        _debtRepository = debtRepository;
         _mainAccountRepository = mainAccountRepository;
         _paymentRepository = paymentRepository;
         _notificationLogRepository = notificationLogRepository;
@@ -63,7 +63,7 @@ public class PaymentService : IPaymentService
             throw new BadRequestException("Payment can only be created for active subscriptions.");
         }
 
-        var debtSnapshotBeforeValidation = await _debtQueryResultRepository.GetCurrentBySubscriptionAndDebtIdAsync(
+        var debtSnapshotBeforeValidation = await _debtRepository.GetCurrentBySubscriptionAndDebtIdAsync(
             subscriptionId,
             request.DebtId,
             cancellationToken)
@@ -91,7 +91,7 @@ public class PaymentService : IPaymentService
             throw new ConflictException("A successful payment already exists for this debt.");
         }
 
-        var currentDebtSnapshot = await _debtQueryResultRepository.GetCurrentBySubscriptionAndDebtIdAsync(
+        var currentDebtSnapshot = await _debtRepository.GetCurrentBySubscriptionAndDebtIdAsync(
             subscriptionId,
             request.DebtId,
             cancellationToken)
@@ -138,7 +138,7 @@ public class PaymentService : IPaymentService
                 currentDebtSnapshot.IsDeleted = true;
                 currentDebtSnapshot.DeletedAtUtc = DateTime.UtcNow;
                 currentDebtSnapshot.UpdatedAtUtc = DateTime.UtcNow;
-                _debtQueryResultRepository.Update(currentDebtSnapshot);
+                _debtRepository.Update(currentDebtSnapshot);
             }
 
             await _paymentRepository.AddAsync(payment, cancellationToken);
@@ -185,7 +185,7 @@ public class PaymentService : IPaymentService
         await _redisCacheStore.RemoveAsync(CacheKeyFactory.SubscriptionsActiveAll(), cancellationToken);
     }
 
-    private async Task<DebtQueryResult> ThrowDebtConflictAsync(Guid debtId, CancellationToken cancellationToken)
+    private async Task<Debt> ThrowDebtConflictAsync(Guid debtId, CancellationToken cancellationToken)
     {
         if (await _paymentRepository.HasSuccessfulPaymentForDebtIdAsync(debtId, cancellationToken))
         {

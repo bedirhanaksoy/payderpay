@@ -2,7 +2,7 @@ using PayderPay.Domain.Common;
 
 namespace PayderPay.Domain.Entities;
 
-public class DebtQueryResult : BaseEntity
+public class Debt : BaseEntity
 {
     public Guid DebtId { get; set; }
     public Guid SubscriptionId { get; set; }

@@ -77,7 +77,7 @@ public class PaymentServiceTests
         var gateway = new FakePaymentGatewayClient(success: true);
         var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
         var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 500m);
-        var debtRepository = new InMemoryDebtQueryResultRepository(debtBelongsToSubscription: true);
+        var debtRepository = new InMemoryDebtRepository(debtBelongsToSubscription: true);
         var debtQueryService = new FakeDebtQueryService(TestData.SubscriptionId, [CreateLiveDebt(250m)]);
 
         var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtQueryService, debtRepository: debtRepository);
@@ -104,7 +104,7 @@ public class PaymentServiceTests
         var gateway = new FakePaymentGatewayClient(success: false);
         var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
         var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 500m);
-        var debtRepository = new InMemoryDebtQueryResultRepository(debtBelongsToSubscription: true);
+        var debtRepository = new InMemoryDebtRepository(debtBelongsToSubscription: true);
         var debtQueryService = new FakeDebtQueryService(TestData.SubscriptionId, [CreateLiveDebt(250m)]);
 
         var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtQueryService, debtRepository: debtRepository);
@@ -164,7 +164,7 @@ public class PaymentServiceTests
         var gateway = new FakePaymentGatewayClient(success: false);
         var paymentRepository = new InMemoryPaymentRepository(hasSuccessfulPayment: false);
         var mainAccountRepository = new InMemoryMainAccountRepository(initialBalance: 500m);
-        var debtRepository = new InMemoryDebtQueryResultRepository(debtBelongsToSubscription: true);
+        var debtRepository = new InMemoryDebtRepository(debtBelongsToSubscription: true);
         var debtQueryService = new FakeDebtQueryService(TestData.SubscriptionId, [CreateLiveDebt(250m)]);
 
         var service = BuildService(paymentRepository, mainAccountRepository, gateway, debtQueryService, debtRepository: debtRepository);
@@ -183,9 +183,9 @@ public class PaymentServiceTests
         FakePaymentGatewayClient gateway,
         FakeDebtQueryService debtQueryService,
         bool? debtBelongsToSubscription = null,
-        InMemoryDebtQueryResultRepository? debtRepository = null)
+        InMemoryDebtRepository? debtRepository = null)
     {
-        debtRepository ??= new InMemoryDebtQueryResultRepository(debtBelongsToSubscription ?? true);
+        debtRepository ??= new InMemoryDebtRepository(debtBelongsToSubscription ?? true);
 
         return new PaymentService(
             new InMemorySubscriptionRepository(),
@@ -278,15 +278,15 @@ public class PaymentServiceTests
         public Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class InMemoryDebtQueryResultRepository : IDebtQueryResultRepository
+    private sealed class InMemoryDebtRepository : IDebtRepository
     {
         private readonly bool _debtBelongsToSubscription;
-        private readonly DebtQueryResult _debt;
+        private readonly Debt _debt;
 
-        public InMemoryDebtQueryResultRepository(bool debtBelongsToSubscription)
+        public InMemoryDebtRepository(bool debtBelongsToSubscription)
         {
             _debtBelongsToSubscription = debtBelongsToSubscription;
-            _debt = new DebtQueryResult
+            _debt = new Debt
             {
                 DebtId = TestData.DebtId,
                 SubscriptionId = debtBelongsToSubscription ? TestData.SubscriptionId : Guid.NewGuid(),
@@ -302,35 +302,35 @@ public class PaymentServiceTests
             };
         }
 
-        public DebtQueryResult? UpdatedDebt { get; private set; }
+        public Debt? UpdatedDebt { get; private set; }
 
-        public Task AddAsync(DebtQueryResult debtQueryResult, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddAsync(Debt debtQueryResult, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task AddRangeAsync(IReadOnlyList<DebtQueryResult> debtQueryResults, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRangeAsync(IReadOnlyList<Debt> debtQueryResults, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<DebtQueryResult?> GetCurrentBySubscriptionAndDebtIdAsync(Guid subscriptionId, Guid debtId, CancellationToken cancellationToken = default)
+        public Task<Debt?> GetCurrentBySubscriptionAndDebtIdAsync(Guid subscriptionId, Guid debtId, CancellationToken cancellationToken = default)
         {
             if (!_debtBelongsToSubscription || debtId != TestData.DebtId || subscriptionId != TestData.SubscriptionId || _debt.IsDeleted)
             {
-                return Task.FromResult<DebtQueryResult?>(null);
+                return Task.FromResult<Debt?>(null);
             }
 
-            return Task.FromResult<DebtQueryResult?>(_debt);
+            return Task.FromResult<Debt?>(_debt);
         }
 
-        public Task<IReadOnlyList<DebtQueryResult>> GetCurrentBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<Debt>> GetCurrentBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default)
         {
             if (_debtBelongsToSubscription && subscriptionId == TestData.SubscriptionId && !_debt.IsDeleted)
             {
-                return Task.FromResult<IReadOnlyList<DebtQueryResult>>([_debt]);
+                return Task.FromResult<IReadOnlyList<Debt>>([_debt]);
             }
 
-            return Task.FromResult<IReadOnlyList<DebtQueryResult>>(Array.Empty<DebtQueryResult>());
+            return Task.FromResult<IReadOnlyList<Debt>>(Array.Empty<Debt>());
         }
 
         public Task SoftDeleteCurrentBySubscriptionAsync(Guid subscriptionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public void Update(DebtQueryResult debtQueryResult)
+        public void Update(Debt debtQueryResult)
         {
             UpdatedDebt = debtQueryResult;
         }
