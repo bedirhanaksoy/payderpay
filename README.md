@@ -14,9 +14,9 @@ PayderPay, abonelik bazlı tekrarlayan ödemeleri (elektrik, su, doğalgaz, inte
 - **Dashboard:** Aylık özet, ödenmemiş abonelik listesi, ödeme geçmişi (Redis cache'li)
 
 ## AI Kullanımı
-- AI kullanımı proje süresince oluşturulmak istenen yapıların ve fonksiyonların teknik olarak detaylı tasviri ve açıklaması ile prompt'lar oluşturularak yapılmıştır. 
+- AI kullanımı proje süresince oluşturulmak istenen yapıların ve fonksiyonların teknik olarak detaylı tasviri, beklenen çıktı yapısı ve açıklaması ile prompt'lar oluşturularak yapılmıştır. 
 
-- AI çıktıları doğrudan çalıştırılmayıp mevcut yapılar ile tasvir edildiği şekilde etkileşim kurduğundan emin olunduktan sonra edge-case testleri yapılıp mevcut mimariye entegre edilmiştir. 
+- AI çıktıları doğrudan çalıştırılmayıp mevcut yapılar ile beklendiği edildiği şekilde etkileşim kurduğundan emin olunduktan sonra edge-case testleri yapılıp mevcut mimariye entegre edilmiştir. 
 
 - Örnek bir prompt örnekteki gibidir:
 
