@@ -55,6 +55,33 @@ public class PaymentService : IPaymentService
 
     public async Task<PaymentResponse> CreateAsync(Guid subscriptionId, CreatePaymentRequest request, CancellationToken cancellationToken = default)
     {
+        // Serialize concurrent payment attempts for the same debt via a PostgreSQL advisory lock.
+        // Without this, two simultaneous requests (double-click, two tabs, retry) could both pass
+        // HasSuccessfulPayment, both call the gateway, and double-charge the customer — the DB
+        // unique index would only catch the second insert AFTER money already left the gateway.
+        var lockKey = unchecked(BitConverter.ToInt64(request.DebtId.ToByteArray(), 0));
+        var lockAcquired = await _unitOfWork.TryAcquireAdvisoryLockAsync(lockKey, cancellationToken);
+
+        if (!lockAcquired)
+        {
+            throw new ConflictException(
+                "Another payment is already in progress for this debt. Please wait and try again.");
+        }
+
+        try
+        {
+            return await CreateInternalAsync(subscriptionId, request, cancellationToken);
+        }
+        finally
+        {
+            // Always release the lock, even on cancellation/exception. Use CancellationToken.None so
+            // a cancelled outer call still releases the lock.
+            await _unitOfWork.ReleaseAdvisoryLockAsync(lockKey, CancellationToken.None);
+        }
+    }
+
+    private async Task<PaymentResponse> CreateInternalAsync(Guid subscriptionId, CreatePaymentRequest request, CancellationToken cancellationToken)
+    {
         var subscription = await _subscriptionRepository.GetByIdAsync(subscriptionId, cancellationToken)
             ?? throw new NotFoundException($"Subscription '{subscriptionId}' was not found.");
 

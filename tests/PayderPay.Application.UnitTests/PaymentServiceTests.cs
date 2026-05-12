@@ -582,5 +582,7 @@ public class PaymentServiceTests
         public Task CommitTransactionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task RollbackTransactionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
+        public Task<bool> TryAcquireAdvisoryLockAsync(long key, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task ReleaseAdvisoryLockAsync(long key, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

@@ -65,7 +65,8 @@ export interface UpdateSubscriptionRequest {
   status: SubscriptionStatus
 }
 
-export interface DebtQueryRequest {}
+// Debt query endpoint has no body — placeholder type for symmetry with the API client.
+export type DebtQueryRequest = Record<string, never>
 
 export interface DebtItemResponse {
   debtId: string

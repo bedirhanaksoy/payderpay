@@ -35,6 +35,9 @@ export default function BillingPage() {
   useEffect(() => {
     if (!subscriptionId && activeSubscriptions.length > 0) {
       const initialSubscriptionId = activeSubscriptions[0].id
+      // Initializing default selection once subscriptions data arrives from the server —
+      // legitimate "sync state with async data" effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSubscriptionId(initialSubscriptionId)
       setHistorySubscriptionId(initialSubscriptionId)
       setSearchParams({ subscriptionId: initialSubscriptionId })
@@ -51,6 +54,9 @@ export default function BillingPage() {
   const paymentHistoryPageSize = 20
 
   useEffect(() => {
+    // Reset pagination to first page when the user switches the active subscription —
+    // legitimate "reset local state on dependency change" effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPaymentHistoryPage(1)
   }, [historySubscriptionId])
 

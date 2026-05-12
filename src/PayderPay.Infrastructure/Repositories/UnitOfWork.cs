@@ -59,6 +59,57 @@ public class UnitOfWork : IUnitOfWork, IAsyncDisposable
         return _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> TryAcquireAdvisoryLockAsync(long key, CancellationToken cancellationToken = default)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            // Non-relational provider (e.g. in-memory tests) — locking is a no-op,
+            // assume acquired so production logic can proceed without modification.
+            return true;
+        }
+
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT pg_try_advisory_lock(@key)";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@key";
+        p.Value = key;
+        cmd.Parameters.Add(p);
+
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return result is bool acquired && acquired;
+    }
+
+    public async Task ReleaseAdvisoryLockAsync(long key, CancellationToken cancellationToken = default)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            return;
+        }
+
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            // Connection already returned to the pool — advisory lock is released
+            // automatically when the underlying session ends or DISCARD ALL is issued.
+            return;
+        }
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT pg_advisory_unlock(@key)";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@key";
+        p.Value = key;
+        cmd.Parameters.Add(p);
+
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_currentTransaction is not null)

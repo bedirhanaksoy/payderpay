@@ -125,12 +125,10 @@ export default function SubscriptionsPage() {
     },
   })
 
-  const items = subscriptionsQuery.data?.items ?? []
-
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => Number(a.status) - Number(b.status)),
-    [items],
-  )
+  const sorted = useMemo(() => {
+    const items = subscriptionsQuery.data?.items ?? []
+    return [...items].sort((a, b) => Number(a.status) - Number(b.status))
+  }, [subscriptionsQuery.data?.items])
 
   if (subscriptionsQuery.isLoading) {
     return <div className="empty-state"><span className="spin">◌</span></div>
